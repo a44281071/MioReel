@@ -1,0 +1,91 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <x:Double x:Key="AppMinFontSize">13</x:Double>
+  <x:Double x:Key="AppBodyFontSize">14</x:Double>
+
+  <!-- Override Fluent Accent Colors so Slider / ToggleSwitch / RadioButton match cinema brand -->
+  <Color x:Key="SystemAccentColor">#E11D48</Color>
+  <Color x:Key="SystemAccentColorLight1">#FB7185</Color>
+  <Color x:Key="SystemAccentColorLight2">#FDA4AF</Color>
+  <Color x:Key="SystemAccentColorLight3">#FECDD3</Color>
+  <Color x:Key="SystemAccentColorDark1">#BE123C</Color>
+  <Color x:Key="SystemAccentColorDark2">#9F1239</Color>
+  <Color x:Key="SystemAccentColorDark3">#881337</Color>
+
+  <!-- Brand Accents (WCAG AA compliant with white text) -->
+  <Color x:Key="BrandRoseColor">#C81E4A</Color>
+  <Color x:Key="BrandAmberColor">#C2410C</Color>
+  <SolidColorBrush x:Key="AccentBadgeBrush" Color="#BE123C" />
+  <SolidColorBrush x:Key="AccentAmberBrush" Color="#F59E0B" />
+  <SolidColorBrush x:Key="SuccessBrush" Color="#34D399" />
+
+  <LinearGradientBrush x:Key="BrandGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#C81E4A" Offset="0" />
+    <GradientStop Color="#C2410C" Offset="1" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="BrandGradientHoverBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#E11D48" Offset="0" />
+    <GradientStop Color="#EA580C" Offset="1" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="BrandGradientPressedBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#9F1239" Offset="0" />
+    <GradientStop Color="#9A3412" Offset="1" />
+  </LinearGradientBrush>
+
+  <RadialGradientBrush x:Key="PlayerStageBackdropBrush" Center="50%,45%" GradientOrigin="50%,45%" RadiusX="70%" RadiusY="70%">
+    <GradientStop Color="#22BE123C" Offset="0" />
+    <GradientStop Color="#F008090E" Offset="1" />
+  </RadialGradientBrush>
+
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="AccentRoseBrush" Color="#FB7185" />
+      <SolidColorBrush x:Key="AppBgBrush" Color="#0B0C12" />
+      <SolidColorBrush x:Key="SidebarBgBrush" Color="#D411131C" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#C2181B27" />
+      <SolidColorBrush x:Key="SurfaceSolidBrush" Color="#161822" />
+      <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#E024283A" />
+      <SolidColorBrush x:Key="BorderSubtleBrush" Color="#14FFFFFF" />
+      <SolidColorBrush x:Key="BorderStrongBrush" Color="#29FFFFFF" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F4F6FB" />
+      <SolidColorBrush x:Key="TextMutedBrush" Color="#98A1B5" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#24FB7185" />
+      <SolidColorBrush x:Key="ProgressTrackBrush" Color="#3394A3B8" />
+
+      <!-- Sync Aviora Toast / Overlay Palette in Dark Mode -->
+      <SolidColorBrush x:Key="AvioraSurfaceBrush" Color="#141622" />
+      <SolidColorBrush x:Key="AvioraSurfaceRaisedBrush" Color="#1E2233" />
+      <SolidColorBrush x:Key="AvioraBorderBrush" Color="#29FFFFFF" />
+      <SolidColorBrush x:Key="AvioraTextBrush" Color="#F4F6FB" />
+      <SolidColorBrush x:Key="AvioraTextMutedBrush" Color="#98A1B5" />
+      <SolidColorBrush x:Key="AvioraAccentBrush" Color="#FB7185" />
+      <SolidColorBrush x:Key="AvioraInfoBrush" Color="#FB7185" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Default">
+      <SolidColorBrush x:Key="AccentRoseBrush" Color="#BE123C" />
+      <SolidColorBrush x:Key="AppBgBrush" Color="#F5F6FA" />
+      <SolidColorBrush x:Key="SidebarBgBrush" Color="#E8FFFFFF" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#EBFFFFFF" />
+      <SolidColorBrush x:Key="SurfaceSolidBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#FAF1F5FC" />
+      <SolidColorBrush x:Key="BorderSubtleBrush" Color="#140F172A" />
+      <SolidColorBrush x:Key="BorderStrongBrush" Color="#260F172A" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#111827" />
+      <SolidColorBrush x:Key="TextMutedBrush" Color="#526073" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#1AE11D48" />
+      <SolidColorBrush x:Key="ProgressTrackBrush" Color="#2964748B" />
+
+      <!-- Sync Aviora Toast / Overlay Palette in Light Mode -->
+      <SolidColorBrush x:Key="AvioraSurfaceBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AvioraSurfaceRaisedBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AvioraBorderBrush" Color="#220F172A" />
+      <SolidColorBrush x:Key="AvioraTextBrush" Color="#111827" />
+      <SolidColorBrush x:Key="AvioraTextMutedBrush" Color="#526073" />
+      <SolidColorBrush x:Key="AvioraAccentBrush" Color="#E11D48" />
+      <SolidColorBrush x:Key="AvioraInfoBrush" Color="#E11D48" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

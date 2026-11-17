@@ -1,0 +1,639 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
+        xmlns:aviora="https://github.com/wobushiafa/Aviora"
+        xmlns:ff="using:FrameFlux.Avalonia"
+        xmlns:controls="using:MioReel.Desktop.Controls"
+        xmlns:models="using:MioReel.Core.Models"
+        xmlns:views="using:MioReel.Desktop.Views"
+        xmlns:vm="using:MioReel.Desktop.ViewModels"
+        x:Class="MioReel.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="妙妙短剧"
+        Width="1260"
+        Height="780"
+        MinWidth="340"
+        MinHeight="280"
+        Background="{DynamicResource AppBgBrush}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="48">
+
+  <Window.DataTemplates>
+    <!-- Confirm Dialog Template -->
+    <DataTemplate DataType="vm:ConfirmDialogViewModel" x:DataType="vm:ConfirmDialogViewModel">
+      <Border Background="{DynamicResource SurfaceSolidBrush}"
+              BorderBrush="{DynamicResource BorderStrongBrush}"
+              BorderThickness="1"
+              CornerRadius="18"
+              Padding="22"
+              Width="360">
+        <StackPanel Spacing="16">
+          <TextBlock Text="{Binding Title}"
+                     FontSize="16"
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+          <TextBlock Text="{Binding Message}"
+                     FontSize="{DynamicResource AppMinFontSize}"
+                     LineHeight="19"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Classes="surface-btn" Content="取消" Command="{Binding CancelCommand}" />
+            <Button Classes="brand-cta" Content="确定" Command="{Binding ConfirmCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- Batch Download Dialog Template -->
+    <DataTemplate DataType="vm:BatchDownloadDialogViewModel" x:DataType="vm:BatchDownloadDialogViewModel">
+      <Border Background="{DynamicResource SurfaceSolidBrush}"
+              BorderBrush="{DynamicResource BorderStrongBrush}"
+              BorderThickness="1"
+              CornerRadius="18"
+              Padding="22"
+              Width="380">
+        <StackPanel Spacing="16">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding Drama.Title, StringFormat='离线缓存 · {0}'}"
+                       FontSize="15"
+                       FontWeight="Bold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="{Binding QualityText, StringFormat='选择要下载到本地的集数（默认画质：{0}）'}"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+
+          <StackPanel Spacing="8">
+            <RadioButton GroupName="BatchRange"
+                         IsChecked="{Binding !SelectAllEpisodes, Mode=OneWay}"
+                         Content="{Binding FirstTwentyLabel}"
+                         Foreground="{DynamicResource TextPrimaryBrush}" />
+            <RadioButton GroupName="BatchRange"
+                         IsChecked="{Binding SelectAllEpisodes, Mode=TwoWay}"
+                         Content="{Binding AllEpisodesLabel}"
+                         Foreground="{DynamicResource TextPrimaryBrush}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Classes="surface-btn" Content="取消" Command="{Binding CancelCommand}" />
+            <Button Classes="brand-cta" Content="开始下载" Command="{Binding ConfirmCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <aviora:ToastHost x:Name="ToastHost"
+                    Placement="BottomRight"
+                    ToastMargin="16,16,16,20">
+    <aviora:LoadingOverlay x:Name="LoadingHost"
+                           ShowDelay="0:0:0.1"
+                           CloseDelay="0:0:0.2"
+                           MinimumShowDuration="0:0:0.3">
+      <aviora:Dialog x:Name="DialogHost">
+        <aviora:Drawer x:Name="DrawerHost">
+          <aviora:HeroHost x:Name="PlayerHeroHost"
+                           Duration="0:0:0.34"
+                           FlightMode="Arc"
+                           IsAnimationEnabled="{Binding IsHeroFlightEnabled}">
+            <Grid>
+              <!-- Main Shell -->
+              <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Custom Frameless Titlebar -->
+                <Grid x:Name="TitleBarGrid"
+                      Height="48"
+                      IsVisible="{Binding !Player.IsMiniMode}"
+                      Background="Transparent"
+                      chrome:WindowDecorationProperties.ElementRole="TitleBar"
+                      PointerPressed="OnTitleBarPointerPressed"
+                      DoubleTapped="OnTitleBarDoubleTapped">
+                  <Border Background="{DynamicResource SidebarBgBrush}"
+                          BorderBrush="{DynamicResource BorderSubtleBrush}"
+                          BorderThickness="0,0,0,1"
+                          chrome:WindowDecorationProperties.ElementRole="TitleBar" />
+                  <Grid x:Name="TitleBarContentGrid"
+                        ColumnDefinitions="*,Auto,*"
+                        Margin="16,0,16,0"
+                        Background="Transparent"
+                        chrome:WindowDecorationProperties.ElementRole="TitleBar">
+                    <!-- Brand Emblem (Drag-move handle) -->
+                    <StackPanel HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                VerticalAlignment="Center"
+                                Background="Transparent"
+                                chrome:WindowDecorationProperties.ElementRole="TitleBar">
+                      <Border Width="28"
+                              Height="28"
+                              CornerRadius="8"
+                              Background="{StaticResource BrandGradientBrush}">
+                        <PathIcon Data="{StaticResource IconLogo}"
+                                  Width="15"
+                                  Height="15"
+                                  Foreground="#FFFFFF" />
+                      </Border>
+                      <TextBlock Text="妙妙短剧"
+                                 FontSize="14"
+                                 FontWeight="Bold"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Centered Global Search Pill (True Window Center) -->
+                    <Grid Grid.Column="1"
+                          Width="380"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Margin="16,0"
+                          chrome:WindowDecorationProperties.ElementRole="User"
+                          IsVisible="{Binding ShowSidebarLabels}">
+                      <TextBox x:Name="GlobalSearchBox"
+                               AutomationProperties.Name="搜索短剧"
+                               Classes="search-pill"
+                               Height="34"
+                               PlaceholderText="搜索短剧、漫剧、AI 剧..."
+                               Text="{Binding SearchQuery, Mode=TwoWay}"
+                               GotFocus="OnGlobalSearchGotFocus" />
+                      <PathIcon Data="{StaticResource IconSearch}"
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Margin="12,0,0,0"
+                                IsHitTestVisible="False"
+                                Foreground="{DynamicResource TextMutedBrush}" />
+                    </Grid>
+
+                    <!-- Top Quick Controls -->
+                    <StackPanel Grid.Column="2"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center"
+                                chrome:WindowDecorationProperties.ElementRole="User">
+                      <Button x:Name="ThemeToggleButton"
+                              AutomationProperties.Name="切换主题"
+                              Classes="surface-btn"
+                              Width="34"
+                              Height="34"
+                              Padding="0"
+                              CornerRadius="8"
+                              Command="{Binding SetThemeCommand}"
+                              CommandParameter="{Binding !IsDarkTheme}"
+                              ToolTip.Tip="切换主题">
+                        <Grid>
+                          <PathIcon Data="{StaticResource IconSun}" Width="15" Height="15" IsVisible="{Binding IsDarkTheme}" />
+                          <PathIcon Data="{StaticResource IconMoon}" Width="15" Height="15" IsVisible="{Binding !IsDarkTheme}" />
+                        </Grid>
+                      </Button>
+
+                      <Button x:Name="DownloadsBadgeButton"
+                              AutomationProperties.Name="离线下载"
+                              Classes="surface-btn"
+                              Height="34"
+                              Padding="10,0"
+                              CornerRadius="8"
+                              Command="{Binding NavigateCommand}"
+                              CommandParameter="{x:Static vm:NavSection.Downloads}"
+                              ToolTip.Tip="离线下载">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                          <PathIcon Data="{StaticResource IconDownload}" Width="14" Height="14" VerticalAlignment="Center" />
+                          <Border Background="{StaticResource AccentBadgeBrush}"
+                                  CornerRadius="9"
+                                  Height="18"
+                                  MinWidth="18"
+                                  Padding="5,0"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding HasActiveDownloads}">
+                            <TextBlock Text="{Binding ActiveDownloadCount}"
+                                       FontSize="{DynamicResource AppMinFontSize}"
+                                       FontWeight="Bold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="#FFFFFF" />
+                          </Border>
+                        </StackPanel>
+                      </Button>
+
+                      <Border Width="1" Height="16" Background="{DynamicResource BorderStrongBrush}" Margin="2,0" VerticalAlignment="Center" />
+
+                      <Button x:Name="WinMinBtn"
+                              AutomationProperties.Name="最小化"
+                              Classes="win-cap-btn"
+                              Click="OnMinimizeWindowClick"
+                              ToolTip.Tip="最小化">
+                        <PathIcon Data="{StaticResource IconWinMinimize}" Width="12" Height="12" />
+                      </Button>
+                      <Button x:Name="WinMaxBtn"
+                              AutomationProperties.Name="最大化"
+                              Classes="win-cap-btn"
+                              Click="OnMaximizeToggleClick"
+                              ToolTip.Tip="最大化 / 还原">
+                        <Grid>
+                          <PathIcon x:Name="WinMaxIcon" Data="{StaticResource IconWinMaximize}" Width="11" Height="11" />
+                          <PathIcon x:Name="WinRestoreIcon" Data="{StaticResource IconWinRestore}" Width="11" Height="11" IsVisible="False" />
+                        </Grid>
+                      </Button>
+                      <Button x:Name="WinCloseBtn"
+                              AutomationProperties.Name="关闭"
+                              Classes="win-cap-btn close"
+                              Click="OnCloseWindowClick"
+                              ToolTip.Tip="关闭">
+                        <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11" />
+                      </Button>
+                    </StackPanel>
+                  </Grid>
+                </Grid>
+
+                <!-- Body: Adaptive Left Rail + Page Content -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+                  <!-- Left Navigation Rail -->
+                  <Grid Width="{Binding SidebarWidth}"
+                        IsVisible="{Binding ShowLeftSidebar}">
+                    <Border Background="{DynamicResource SidebarBgBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="0,0,1,0" />
+                    <Grid RowDefinitions="*,Auto" Margin="10,14">
+                      <ListBox x:Name="NavListBox"
+                               Classes="nav-list"
+                               AutomationProperties.Name="主导航"
+                               ItemsSource="{Binding NavItems}"
+                               SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:NavItemViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                              <PathIcon Data="{Binding IconGeometry}" Width="16" Height="16" />
+                              <TextBlock Text="{Binding Label}"
+                                         IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowSidebarLabels}"
+                                         VerticalAlignment="Center" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+
+                      <!-- Quick Resume Card (Wide mode only) -->
+                      <Border Grid.Row="1" IsVisible="{Binding ShowSidebarLabels}">
+                        <Button Classes="drama-card-btn"
+                                Padding="10"
+                                CornerRadius="14"
+                                IsVisible="{Binding HasResumeDrama}"
+                                Command="{Binding OpenDramaCommand}"
+                                CommandParameter="{Binding ResumeDrama}">
+                          <StackPanel Spacing="4">
+                            <TextBlock Text="继续观看" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding ResumeDrama.Title, FallbackValue='', TargetNullValue=''}" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="{Binding ResumeDrama.StatusLabel, StringFormat='{}立即续播 · {0}', FallbackValue='', TargetNullValue=''}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource AccentRoseBrush}" />
+                          </StackPanel>
+                        </Button>
+                      </Border>
+                    </Grid>
+                  </Grid>
+
+                  <!-- Main Page Area (Each view fixes its header and scrolls only its list) -->
+                  <Grid Grid.Column="1" Margin="20,16,8,0">
+                    <views:ExploreView IsVisible="{Binding IsExploreActive}" />
+                    <views:SearchView IsVisible="{Binding IsSearchActive}" />
+                    <views:HistoryView IsVisible="{Binding IsHistoryActive}" />
+                    <views:DownloadsView IsVisible="{Binding IsDownloadsActive}" />
+                    <views:SettingsView IsVisible="{Binding IsSettingsActive}" />
+                  </Grid>
+                </Grid>
+
+                <!-- Narrow Window Bottom Nav -->
+                <Grid Grid.Row="2"
+                      Height="48"
+                      IsVisible="{Binding ShowBottomNav}">
+                  <Border Background="{DynamicResource SidebarBgBrush}"
+                          BorderBrush="{DynamicResource BorderSubtleBrush}"
+                          BorderThickness="0,1,0,0" />
+                  <ListBox x:Name="BottomNavListBox"
+                           Classes="bottom-nav-list"
+                           AutomationProperties.Name="底部导航"
+                           ItemsSource="{Binding NavItems}"
+                           SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}">
+                    <ListBox.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <UniformGrid Columns="5" />
+                      </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:NavItemViewModel">
+                        <TextBlock Text="{Binding ShortLabel}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </Grid>
+              </Grid>
+
+              <!-- IMMERSIVE PLAYER OVERLAY (Coordinated with Aviora HeroHost) -->
+              <aviora:HeroOverlay IsOpen="{Binding Player.IsOpen, Mode=TwoWay}"
+                                  IsLightDismissEnabled="False"
+                                  IsEscapeKeyEnabled="False"
+                                  BackdropBrush="{DynamicResource AppBgBrush}"
+                                  TransitionDuration="0:0:0.30">
+                <Grid RowDefinitions="Auto,*" Background="{DynamicResource AppBgBrush}">
+                  <!-- Player Top Bar -->
+                  <Grid x:Name="PlayerTopBarGrid"
+                        Height="48"
+                        IsVisible="{Binding !Player.IsMiniMode}"
+                        Background="Transparent"
+                        chrome:WindowDecorationProperties.ElementRole="TitleBar"
+                        PointerPressed="OnTitleBarPointerPressed"
+                        DoubleTapped="OnTitleBarDoubleTapped">
+                    <Border Background="{DynamicResource SidebarBgBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="0,0,0,1"
+                            chrome:WindowDecorationProperties.ElementRole="TitleBar" />
+                    <Grid x:Name="PlayerTopBarContentGrid"
+                          ColumnDefinitions="Auto,*,Auto"
+                          Margin="16,0,16,0"
+                          Background="Transparent"
+                          chrome:WindowDecorationProperties.ElementRole="TitleBar">
+                      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button x:Name="PlayerBackBtn"
+                                chrome:WindowDecorationProperties.ElementRole="User"
+                                Classes="surface-btn"
+                                Padding="10,5"
+                                Command="{Binding Player.CloseCommand}">
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <PathIcon Data="{StaticResource IconBack}" Width="12" Height="12" />
+                            <TextBlock Text="返回" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding Player.Title}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   MaxWidth="260"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <Border Background="{DynamicResource AccentSoftBrush}"
+                                CornerRadius="999"
+                                Padding="8,2"
+                                VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Player.EpisodeBadgeText}"
+                                     FontSize="{DynamicResource AppMinFontSize}"
+                                     FontWeight="SemiBold"
+                                     Foreground="{DynamicResource AccentRoseBrush}" />
+                        </Border>
+                        <Border BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="999"
+                                Padding="8,2"
+                                VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Player.AspectLabel}"
+                                     FontSize="{DynamicResource AppMinFontSize}"
+                                     Foreground="{DynamicResource TextMutedBrush}" />
+                        </Border>
+                      </StackPanel>
+
+                      <StackPanel Grid.Column="2"
+                                  Orientation="Horizontal"
+                                  Spacing="8"
+                                  VerticalAlignment="Center"
+                                  chrome:WindowDecorationProperties.ElementRole="User">
+                        <Button Classes="surface-btn"
+                                Padding="10,5"
+                                Content="缓存"
+                                Command="{Binding OpenBatchDownloadCommand}"
+                                CommandParameter="{Binding Player.CurrentDrama}" />
+                        <Button x:Name="PlayerMiniBtn"
+                                Classes="brand-cta"
+                                Padding="12,6"
+                                Command="{Binding Player.ToggleMiniModeCommand}">
+                          <StackPanel Orientation="Horizontal" Spacing="5">
+                            <PathIcon Data="{StaticResource IconMiniWindow}" Width="13" Height="13" Foreground="#FFFFFF" />
+                            <TextBlock Text="小窗看剧" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Button>
+
+                        <Border Width="1" Height="16" Background="{DynamicResource BorderStrongBrush}" Margin="2,0" VerticalAlignment="Center" />
+
+                        <Button AutomationProperties.Name="最小化"
+                                Classes="win-cap-btn"
+                                Click="OnMinimizeWindowClick"
+                                ToolTip.Tip="最小化">
+                          <PathIcon Data="{StaticResource IconWinMinimize}" Width="12" Height="12" />
+                        </Button>
+                        <Button AutomationProperties.Name="最大化"
+                                Classes="win-cap-btn"
+                                Click="OnMaximizeToggleClick"
+                                ToolTip.Tip="最大化 / 还原">
+                          <Grid>
+                            <PathIcon x:Name="PlayerMaxIcon" Data="{StaticResource IconWinMaximize}" Width="11" Height="11" />
+                            <PathIcon x:Name="PlayerRestoreIcon" Data="{StaticResource IconWinRestore}" Width="11" Height="11" IsVisible="False" />
+                          </Grid>
+                        </Button>
+                        <Button AutomationProperties.Name="关闭"
+                                Classes="win-cap-btn close"
+                                Click="OnCloseWindowClick"
+                                ToolTip.Tip="关闭">
+                          <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11" />
+                        </Button>
+                      </StackPanel>
+                    </Grid>
+                  </Grid>
+
+                  <!-- Adaptive Player Workspace Split -->
+                  <Grid x:Name="PlayerSplitGrid"
+                        Grid.Row="1"
+                        ColumnDefinitions="*,Auto"
+                        RowDefinitions="*,Auto"
+                        Margin="16"
+                        ColumnSpacing="16"
+                        RowSpacing="14">
+                    <!-- Elastic Video Stage + NativeSurface External Control Dock -->
+                    <Border x:Name="PlayerStageWrap"
+                            CornerRadius="18"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            Background="{StaticResource PlayerStageBackdropBrush}"
+                            ClipToBounds="True"
+                            PointerEntered="OnMiniStagePointerEntered"
+                            PointerExited="OnMiniStagePointerExited"
+                            PointerPressed="OnMiniStagePointerPressed"
+                            DoubleTapped="OnMiniStageDoubleTapped">
+                      <Grid RowDefinitions="Auto,*,Auto">
+                        <!-- Row 0: Docked Mini Top Bar (NativeSurface Mode) -->
+                        <controls:PlayerMiniTopBar Grid.Row="0"
+                                                   DataContext="{Binding Player}"
+                                                   IsVisible="{Binding UseDockedMiniTopBar}" />
+
+                        <!-- Row 1: Video Viewport -->
+                        <Grid x:Name="PlayerViewportHost"
+                              Grid.Row="1"
+                              SizeChanged="OnPlayerStageSizeChanged">
+                          <Border x:Name="PlayerViewportBox"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  CornerRadius="16"
+                                  ClipToBounds="True"
+                                  Background="#08090E">
+                            <aviora:Hero Tag="{Binding Player.HeroTag}" CornerRadius="16">
+                              <Grid>
+                                <!-- Cover backdrop before / during stream transition -->
+                                <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}"
+                                                            CornerRadius="16"
+                                                            ShowBadges="False"
+                                                            ShowTextOverlay="False" />
+
+                                <!-- FrameFlux Hardware Video Surface -->
+                                <ff:MediaView x:Name="FrameFluxPlayer"
+                                              Stretch="Uniform"
+                                              PresentationMode="Automatic"
+                                              AutoPlay="True"
+                                              IsVisible="{Binding Player.HasRealMediaUrl}" />
+
+                                <!-- Floating Mini Top Bar (Non-NativeSurface) -->
+                                <controls:PlayerMiniTopBar VerticalAlignment="Top"
+                                                           DataContext="{Binding Player}"
+                                                           IsVisible="{Binding UseFloatingMiniTopBar}" />
+
+                                <!-- Stream Resolving Overlay -->
+                                <Border Background="#88000000"
+                                        IsVisible="{Binding Player.IsResolvingStream}">
+                                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                                    <aviora:Loading IndicatorStyle="DoubleRing"
+                                                    Width="34"
+                                                    Height="34"
+                                                    IndicatorBrush="#FB7185" />
+                                    <TextBlock Text="正在加载剧集..."
+                                               FontSize="{DynamicResource AppMinFontSize}"
+                                               Foreground="#F8FAFC" />
+                                  </StackPanel>
+                                </Border>
+
+                                <!-- Stream Error Overlay -->
+                                <Border Background="#B808090E"
+                                        IsVisible="{Binding Player.HasStreamError}">
+                                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="280">
+                                    <TextBlock Text="{Binding Player.StreamErrorMessage}"
+                                               TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               FontSize="{DynamicResource AppMinFontSize}"
+                                               Foreground="#F8FAFC" />
+                                    <Button Classes="brand-cta"
+                                            HorizontalAlignment="Center"
+                                            Content="重新加载"
+                                            Command="{Binding Player.RetryResolveCommand}" />
+                                  </StackPanel>
+                                </Border>
+
+                                <!-- Floating Transport Bar (Non-NativeSurface) -->
+                                <controls:PlayerTransportBar VerticalAlignment="Bottom"
+                                                             Margin="10"
+                                                             DataContext="{Binding Player}"
+                                                             IsVisible="{Binding UseFloatingHud}" />
+
+                                <!-- Floating Option Menu Popover (Non-NativeSurface) -->
+                                <controls:PlayerOptionMenuPanel x:Name="FloatingMenuPanel"
+                                                                  VerticalAlignment="Bottom"
+                                                                  HorizontalAlignment="Right"
+                                                                  Margin="10,0,10,96"
+                                                                  DataContext="{Binding Player}"
+                                                                  IsVisible="{Binding UseFloatingMenu}" />
+                              </Grid>
+                            </aviora:Hero>
+                          </Border>
+                        </Grid>
+
+                        <!-- Row 2: Docked Control Bar (NativeSurface Mode — Outside Child HWND Airspace) -->
+                        <Grid Grid.Row="2"
+                              Margin="10,6,10,10"
+                              IsVisible="{Binding Player.UseDockedHud}">
+                          <controls:PlayerTransportBar x:Name="DockedTransportBar"
+                                                       DataContext="{Binding Player}" />
+                          <!-- Floating Popup Window ABOVE NativeSurface HWND without shrinking video layout -->
+                          <Popup x:Name="DockedMenuPopup"
+                                 PlacementTarget="{Binding #DockedTransportBar}"
+                                 Placement="TopEdgeAlignedRight"
+                                 VerticalOffset="-6"
+                                 ShouldUseOverlayLayer="False"
+                                 WindowManagerAddShadowHint="False"
+                                 IsLightDismissEnabled="False"
+                                 Topmost="True"
+                                 IsOpen="{Binding Player.UseDockedMenu, Mode=OneWay}"
+                                 Closed="OnDockedMenuPopupClosed">
+                            <Border Padding="8,6,8,10" Background="Transparent">
+                              <controls:PlayerOptionMenuPanel x:Name="DockedMenuPanel"
+                                                                DataContext="{Binding Player}" />
+                            </Border>
+                          </Popup>
+                        </Grid>
+                      </Grid>
+                    </Border>
+
+                    <!-- Right / Bottom Episode & Synopsis Panel -->
+                    <aviora:AvioraCard x:Name="PlayerSidePanel"
+                                       Grid.Column="1"
+                                       Grid.Row="0"
+                                       Width="310"
+                                       Background="{DynamicResource SurfaceBrush}"
+                                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                       BorderThickness="1"
+                                       CornerRadius="18"
+                                       Padding="16"
+                                       IsVisible="{Binding !Player.IsMiniMode}">
+                      <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+                        <StackPanel Spacing="6">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="剧情简介" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <Border Grid.Column="1" Background="{DynamicResource AccentSoftBrush}" CornerRadius="999" Padding="8,2">
+                              <TextBlock Text="{Binding Player.CategoryTagsText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource AccentRoseBrush}" />
+                            </Border>
+                          </Grid>
+                          <TextBlock Text="{Binding Player.Synopsis}"
+                                     FontSize="{DynamicResource AppMinFontSize}"
+                                     LineHeight="18"
+                                     MaxLines="3"
+                                     TextTrimming="CharacterEllipsis"
+                                     TextWrapping="Wrap"
+                                     Foreground="{DynamicResource TextMutedBrush}" />
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                          <TextBlock Text="{Binding Player.TotalEpisodesText}" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                          <TextBlock Grid.Column="1" Text="{Binding Player.ResolutionLabel}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <ItemsControl Grid.Row="2"
+                                      Classes="virtual-list"
+                                      ItemsSource="{Binding Player.EpisodeRows}"
+                                      Margin="0,0,-4,0">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EpisodeRowViewModel">
+                              <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemsPanel>
+                                  <ItemsPanelTemplate>
+                                    <UniformGrid Columns="5" />
+                                  </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate x:DataType="vm:EpisodeOptionViewModel">
+                                    <Button Classes="ep-btn"
+                                            Classes.active="{Binding IsCurrent}"
+                                            Margin="3"
+                                            Content="{Binding Label}"
+                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Player.SelectEpisodeCommand}"
+                                            CommandParameter="{Binding}" />
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                      </Grid>
+                    </aviora:AvioraCard>
+                  </Grid>
+                </Grid>
+              </aviora:HeroOverlay>
+            </Grid>
+          </aviora:HeroHost>
+        </aviora:Drawer>
+      </aviora:Dialog>
+    </aviora:LoadingOverlay>
+  </aviora:ToastHost>
+</Window>

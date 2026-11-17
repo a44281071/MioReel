@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+.vs/
+.idea/
+*.user
+*.suo
+*.log
+tmp_jit_rel/
+debug_err.txt

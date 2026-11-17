@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <ApplicationTitle>妙妙短剧</ApplicationTitle>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows')) or $(RuntimeIdentifier.StartsWith('win'))">$(DefineConstants);FF_WINDOWS</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Linux')) or $(RuntimeIdentifier.StartsWith('linux'))">$(DefineConstants);FF_LINUX</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MioReel.Core\MioReel.Core.csproj" />
+    <ProjectReference Include="..\MioReel.Infrastructure\MioReel.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="AvaDevTools" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Aviora.Controls" />
+    <PackageReference Include="Aviora.Core" />
+    <PackageReference Include="Aviora.Presentation.Abstractions" />
+    <PackageReference Include="FrameFlux.Avalonia" />
+    <PackageReference Include="FrameFlux.FFmpeg" />
+    <PackageReference Include="FrameFlux.Avalonia.Windows" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $(RuntimeIdentifier.StartsWith('win'))" />
+    <PackageReference Include="FrameFlux.FFmpeg.NativeAssets.Windows" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $(RuntimeIdentifier.StartsWith('win'))" />
+    <PackageReference Include="FrameFlux.Avalonia.Linux" Condition="$([MSBuild]::IsOSPlatform('Linux')) or $(RuntimeIdentifier.StartsWith('linux'))" />
+    <PackageReference Include="FrameFlux.FFmpeg.NativeAssets.Linux" Condition="$([MSBuild]::IsOSPlatform('Linux')) or $(RuntimeIdentifier.StartsWith('linux'))" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Avalonia" />
+    <PackageReference Include="ReactiveUI.Avalonia.Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <Target Name="CleanPublishPdbs" AfterTargets="Publish">
+    <ItemGroup>
+      <_PublishPdbFiles Include="$(PublishDir)*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_PublishPdbFiles)" />
+  </Target>
+</Project>

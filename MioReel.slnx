@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MioReel.Core/MioReel.Core.csproj" />
+    <Project Path="src/MioReel.Infrastructure/MioReel.Infrastructure.csproj" />
+    <Project Path="src/MioReel.Desktop/MioReel.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MioReel.RegressionTests/MioReel.RegressionTests.csproj" />
+  </Folder>
+</Solution>

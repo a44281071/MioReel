@@ -1,0 +1,358 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:aviora="using:Aviora.Controls">
+  <Style Selector="Window">
+    <Setter Property="FontSize" Value="{DynamicResource AppBodyFontSize}" />
+  </Style>
+  <Style Selector="ToolTip">
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+  </Style>
+
+  <!-- Hide Avalonia 12 default drawn overlay title text & caption buttons so custom titlebar owns top bar -->
+  <Style Selector="Panel#PART_TitleTextPanel">
+    <Setter Property="IsVisible" Value="False" />
+    <Setter Property="Width" Value="0" />
+    <Setter Property="MaxWidth" Value="0" />
+  </Style>
+  <Style Selector="Button#PART_FullScreenButton, Button#PART_MinimizeButton, Button#PART_MaximizeButton, Button#PART_CloseButton">
+    <Setter Property="IsVisible" Value="False" />
+    <Setter Property="Width" Value="0" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MaxWidth" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+
+  <!-- Smooth Button Transitions -->
+  <Style Selector="Button">
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.14" Easing="CubicEaseOut" />
+        <DoubleTransition Property="Opacity" Duration="0:0:0.14" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button:pressed">
+    <Setter Property="RenderTransform" Value="scale(0.97)" />
+  </Style>
+
+  <!-- Primary Brand CTA -->
+  <Style Selector="Button.brand-cta">
+    <Setter Property="Background" Value="{StaticResource BrandGradientBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="16,9" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.brand-cta:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientHoverBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.brand-cta:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientPressedBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+
+  <!-- Ghost Surface Button -->
+  <Style Selector="Button.surface-btn">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+  </Style>
+  <Style Selector="Button.surface-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.surface-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <!-- Category Pill Button -->
+  <Style Selector="Button.pill-btn">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="999" />
+    <Setter Property="Padding" Value="14,6" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <Style Selector="Button.pill-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.pill-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.pill-btn.active">
+    <Setter Property="Background" Value="{StaticResource BrandGradientBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.pill-btn.active:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientHoverBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.pill-btn.active:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientPressedBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+
+  <!-- Navigation ListBox & Items (Left Rail + Narrow Bottom Nav) -->
+  <Style Selector="ListBox.nav-list, ListBox.bottom-nav-list">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="Margin" Value="0,0,0,4" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentRoseBrush}" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentRoseBrush}" />
+  </Style>
+  <Style Selector="ListBox.nav-list ListBoxItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="ListBox.bottom-nav-list ListBoxItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="4,6" />
+    <Setter Property="Margin" Value="2,4" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <Style Selector="ListBox.bottom-nav-list ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ListBox.bottom-nav-list ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentRoseBrush}" />
+  </Style>
+  <Style Selector="ListBox.bottom-nav-list ListBoxItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Poster Card Hover Elevation -->
+  <Style Selector="Button.drama-card-btn">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="Padding" Value="8" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.drama-card-btn:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="RenderTransform" Value="translateY(-3px)" />
+  </Style>
+  <Style Selector="Button.drama-card-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+  </Style>
+  <Style Selector="Button.drama-card-btn:pressed">
+    <Setter Property="RenderTransform" Value="scale(0.985)" />
+  </Style>
+  <Style Selector="Button.drama-card-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSolidBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+  </Style>
+
+  <!-- Episode Grid Button -->
+  <Style Selector="Button.ep-btn">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <Style Selector="Button.ep-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.ep-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.ep-btn.active">
+    <Setter Property="Background" Value="{StaticResource BrandGradientBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+  <Style Selector="Button.ep-btn.active:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientHoverBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.ep-btn.active:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrandGradientPressedBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+
+  <!-- Search Pill Input -->
+  <Style Selector="TextBox.search-pill">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="999" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+    <Setter Property="Padding" Value="34,6,30,6" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="TextBox.search-pill:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+  </Style>
+  <Style Selector="TextBox.search-pill:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSolidBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRoseBrush}" />
+    <Setter Property="BorderThickness" Value="1.5" />
+  </Style>
+
+  <!-- Card Hover Play Pill -->
+  <Style Selector="Border.card-play-badge">
+    <Setter Property="Opacity" Value="0" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.drama-card-btn:pointerover Border.card-play-badge">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+
+  <!-- Sleek Video Seek Slider -->
+  <Style Selector="Slider.player-seek">
+    <Setter Property="MinHeight" Value="18" />
+    <Setter Property="Foreground" Value="#FB7185" />
+    <Setter Property="Background" Value="#40FFFFFF" />
+  </Style>
+
+  <!-- Unified Window Caption Buttons (34x34 matching titlebar) -->
+  <Style Selector="Button.win-cap-btn">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="Button.win-cap-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.win-cap-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.win-cap-btn.close:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#E11D48" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.win-cap-btn.close:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#BE123C" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+
+  <!-- Toast PART_Close hover polish -->
+  <Style Selector="aviora|Toast /template/ Button#PART_Close:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+
+  <!-- True Virtualized ItemsControl Container (ScrollViewer inside template enables VirtualizingStackPanel) -->
+  <Style Selector="ItemsControl.virtual-list">
+    <Setter Property="ClipToBounds" Value="True" />
+    <Setter Property="Template">
+      <ControlTemplate TargetType="ItemsControl">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Padding="{TemplateBinding Padding}">
+          <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+        </ScrollViewer>
+      </ControlTemplate>
+    </Setter>
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <VirtualizingStackPanel />
+      </ItemsPanelTemplate>
+    </Setter>
+  </Style>
+
+  <!-- Player Transport Flyout Menu -->
+  <Style Selector="FlyoutPresenter.player-menu">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSolidBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="6" />
+    <Setter Property="MinWidth" Value="176" />
+    <Setter Property="MaxWidth" Value="240" />
+  </Style>
+
+  <Style Selector="Button.player-menu-item">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.player-menu-item:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+  <Style Selector="Button.player-menu-item.selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+  </Style>
+</Styles>

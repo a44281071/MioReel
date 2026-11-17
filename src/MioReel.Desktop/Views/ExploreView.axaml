@@ -1,0 +1,303 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
+             xmlns:controls="using:MioReel.Desktop.Controls"
+             xmlns:models="using:MioReel.Core.Models"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Views.ExploreView"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+    <!-- Spotlight Hero Banner -->
+    <aviora:AvioraCard Grid.Row="0"
+                       Margin="0,0,12,0"
+                       Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="20"
+                       Padding="16"
+                       IsVisible="{Binding SpotlightDrama, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="20">
+        <Button Classes="drama-card-btn"
+                AutomationProperties.Name="打开热播推荐剧集"
+                Padding="0"
+                BorderThickness="0"
+                Background="Transparent"
+                Command="{Binding OpenDramaCommand}"
+                CommandParameter="{Binding SpotlightDrama}">
+          <aviora:Hero Tag="{Binding SpotlightDrama.HeroTag}"
+                       CornerRadius="14"
+                       Width="126"
+                       Height="168">
+            <controls:DramaCoverControl Drama="{Binding SpotlightDrama.Drama}"
+                                        CornerRadius="14"
+                                        ShowTextOverlay="False" />
+          </aviora:Hero>
+        </Button>
+
+        <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="14">
+          <StackPanel Spacing="8" VerticalAlignment="Center">
+            <WrapPanel Orientation="Horizontal">
+              <Border Background="{StaticResource BrandGradientBrush}"
+                      CornerRadius="999"
+                      Margin="0,0,8,4"
+                      Padding="10,3">
+                <TextBlock Text="热播推荐"
+                           FontSize="{DynamicResource AppMinFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="#FFFFFF" />
+              </Border>
+              <Border BorderBrush="{DynamicResource BorderStrongBrush}"
+                      BorderThickness="1"
+                      CornerRadius="999"
+                      Margin="0,0,8,4"
+                      Padding="10,3">
+                <TextBlock Text="{Binding SpotlightDrama.Drama.CategoryLabel}"
+                           FontSize="{DynamicResource AppMinFontSize}"
+                           Foreground="{DynamicResource TextPrimaryBrush}" />
+              </Border>
+              <TextBlock Text="{Binding SpotlightDrama.Drama.Remark}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,0,4"
+                         FontSize="{DynamicResource AppMinFontSize}"
+                         Foreground="{DynamicResource TextMutedBrush}" />
+            </WrapPanel>
+
+            <TextBlock Text="{Binding SpotlightDrama.Title}"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+
+            <TextBlock Text="{Binding SpotlightDrama.Intro}"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       LineHeight="19"
+                       MaxLines="3"
+                       TextTrimming="CharacterEllipsis"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+
+          <WrapPanel Grid.Row="1" Orientation="Horizontal">
+            <Button x:Name="SpotlightPlayBtn"
+                    Classes="brand-cta"
+                    Margin="0,0,10,6"
+                    Command="{Binding OpenDramaCommand}"
+                    CommandParameter="{Binding SpotlightDrama}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="#FFFFFF" />
+                <TextBlock Text="立即播放" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <Button Classes="surface-btn"
+                    Margin="0,0,0,6"
+                    Content="缓存剧集"
+                    Command="{Binding OpenBatchDownloadCommand}"
+                    CommandParameter="{Binding SpotlightDrama.Drama}" />
+          </WrapPanel>
+        </Grid>
+      </Grid>
+    </aviora:AvioraCard>
+
+    <!-- Category Filter Pills -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,12,0">
+      <WrapPanel Orientation="Horizontal">
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsAllCategory}"
+                Margin="0,0,8,6"
+                Content="全部"
+                Command="{Binding SelectCategoryCommand}"
+                CommandParameter="{x:Static models:DramaCategory.All}" />
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsRealCategory}"
+                Margin="0,0,8,6"
+                Content="真人剧"
+                Command="{Binding SelectCategoryCommand}"
+                CommandParameter="{x:Static models:DramaCategory.RealDrama}" />
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsComicCategory}"
+                Margin="0,0,8,6"
+                Content="漫剧"
+                Command="{Binding SelectCategoryCommand}"
+                CommandParameter="{x:Static models:DramaCategory.ComicDrama}" />
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsAiCategory}"
+                Margin="0,0,8,6"
+                Content="AI 剧"
+                Command="{Binding SelectCategoryCommand}"
+                CommandParameter="{x:Static models:DramaCategory.AiDrama}" />
+      </WrapPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <Border Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="1"
+                CornerRadius="999"
+                Padding="10,4"
+                VerticalAlignment="Center">
+          <TextBlock FontSize="{DynamicResource AppMinFontSize}"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     Text="{Binding SourceStatusText}" />
+        </Border>
+        <TextBlock VerticalAlignment="Center"
+                   FontSize="{DynamicResource AppMinFontSize}"
+                   Foreground="{DynamicResource TextMutedBrush}"
+                   Text="{Binding CatalogCountText}" />
+        <Button Classes="surface-btn"
+                Padding="10,4"
+                FontSize="{DynamicResource AppMinFontSize}"
+                Content="刷新"
+                Command="{Binding RefreshCatalogCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- Virtualized 3:4 Cover Grid + Loading / Error / Empty States -->
+    <Grid Grid.Row="2">
+      <ItemsControl x:Name="ExploreVirtualizedList"
+                    Classes="virtual-list"
+                    ItemsSource="{Binding ExploreRows}"
+                    IsVisible="{Binding ShowExploreList}"
+                    Padding="2,8,12,12">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:DramaCardRowViewModel">
+          <ItemsControl ItemsSource="{Binding Items}"
+                        ClipToBounds="False"
+                        Margin="0,0,0,14">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="14" ClipToBounds="False" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DramaCardViewModel">
+                <Button Classes="drama-card-btn"
+                        Width="178"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).OpenDramaCommand}"
+                        CommandParameter="{Binding}">
+                  <StackPanel Spacing="8">
+                    <aviora:Hero Tag="{Binding HeroTag}"
+                                 CornerRadius="12"
+                                 Height="214">
+                      <Grid>
+                        <controls:DramaCoverControl Drama="{Binding Drama}"
+                                                    CornerRadius="12"
+                                                    ShowTextOverlay="False" />
+                        <Border Classes="card-play-badge"
+                                Background="#44000000"
+                                CornerRadius="12">
+                          <Border Width="40"
+                                  Height="40"
+                                  CornerRadius="20"
+                                  Background="{StaticResource BrandGradientBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center">
+                            <PathIcon Data="{StaticResource IconPlay}"
+                                      Width="15"
+                                      Height="15"
+                                      Margin="2,0,0,0"
+                                      Foreground="#FFFFFF" />
+                          </Border>
+                        </Border>
+                      </Grid>
+                    </aviora:Hero>
+
+                    <StackPanel Spacing="3" Margin="2,0,2,2">
+                      <TextBlock Text="{Binding Title}"
+                                 FontSize="{DynamicResource AppMinFontSize}"
+                                 FontWeight="SemiBold"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding TagsSummary}"
+                                   FontSize="{DynamicResource AppMinFontSize}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextMutedBrush}" />
+                        <TextBlock Grid.Column="1"
+                                   Margin="6,0,0,0"
+                                   FontSize="{DynamicResource AppMinFontSize}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   Text="{Binding StatusLabel}" />
+                      </Grid>
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+      <!-- Loading State -->
+      <StackPanel HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Spacing="12"
+                  IsVisible="{Binding IsLoadingCatalog}">
+        <aviora:Loading IndicatorStyle="DoubleRing"
+                        Width="34"
+                        Height="34"
+                        IndicatorBrush="{DynamicResource AccentRoseBrush}" />
+        <TextBlock Text="正在获取片库数据..."
+                   FontSize="{DynamicResource AppMinFontSize}"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+      </StackPanel>
+
+      <!-- Gateway Offline / Error State -->
+      <aviora:AvioraCard HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         MaxWidth="440"
+                         Margin="0,0,12,0"
+                         Background="{DynamicResource SurfaceBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
+                         BorderThickness="1"
+                         CornerRadius="18"
+                         Padding="26,24"
+                         IsVisible="{Binding HasCatalogError}">
+        <StackPanel Spacing="12" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding CatalogErrorTitle}"
+                     HorizontalAlignment="Center"
+                     FontSize="16"
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+          <TextBlock Text="{Binding CatalogErrorMessage}"
+                     HorizontalAlignment="Center"
+                     TextAlignment="Center"
+                     TextWrapping="Wrap"
+                     FontSize="{DynamicResource AppMinFontSize}"
+                     LineHeight="18"
+                     Foreground="{DynamicResource TextMutedBrush}" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="0,4,0,0">
+            <Button Classes="brand-cta"
+                    Content="重试连接"
+                    Command="{Binding RefreshCatalogCommand}" />
+            <Button Classes="surface-btn"
+                    Content="配置服务地址"
+                    Command="{Binding OpenSettingsCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </aviora:AvioraCard>
+
+      <!-- Empty State -->
+      <aviora:AvioraCard HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         Background="{DynamicResource SurfaceBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
+                         BorderThickness="1"
+                         CornerRadius="18"
+                         Padding="28,22"
+                         IsVisible="{Binding ShowExploreEmpty}">
+        <TextBlock Text="当前分类暂无可播剧目"
+                   FontSize="{DynamicResource AppMinFontSize}"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+      </aviora:AvioraCard>
+    </Grid>
+
+    <Button Grid.Row="3"
+            Classes="surface-btn"
+            HorizontalAlignment="Center"
+            Margin="0,0,0,12"
+            Content="{Binding LoadMoreButtonText}"
+            IsVisible="{Binding HasMoreCatalog}"
+            IsEnabled="{Binding !IsLoadingMoreCatalog}"
+            Command="{Binding LoadMoreCatalogCommand}" />
+  </Grid>
+</UserControl>

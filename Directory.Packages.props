@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Avalonia" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <PackageVersion Include="AvaDevTools" Version="12.1.11" />
+    <PackageVersion Include="Aviora.Controls" Version="0.6.0" />
+    <PackageVersion Include="Aviora.Core" Version="0.6.0" />
+    <PackageVersion Include="Aviora.Presentation.Abstractions" Version="0.6.0" />
+    <PackageVersion Include="FrameFlux.Avalonia" Version="0.1.3" />
+    <PackageVersion Include="FrameFlux.Avalonia.Linux" Version="0.1.3" />
+    <PackageVersion Include="FrameFlux.Avalonia.Windows" Version="0.1.3" />
+    <PackageVersion Include="FrameFlux.FFmpeg" Version="0.1.3" />
+    <PackageVersion Include="FrameFlux.FFmpeg.NativeAssets.Linux" Version="0.1.3" />
+    <PackageVersion Include="FrameFlux.FFmpeg.NativeAssets.Windows" Version="0.1.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+    <PackageVersion Include="ReactiveUI" Version="27.0.0" />
+    <PackageVersion Include="ReactiveUI.Avalonia" Version="12.1.7" />
+    <PackageVersion Include="ReactiveUI.Avalonia.Microsoft.Extensions.DependencyInjection" Version="12.1.7" />
+    <PackageVersion Include="ReactiveUI.SourceGenerators" Version="5.0.0" />
+  </ItemGroup>
+</Project>

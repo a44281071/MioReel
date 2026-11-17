@@ -1,0 +1,177 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
+             xmlns:models="using:MioReel.Core.Models"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Views.SettingsView"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,*" RowSpacing="16">
+    <TextBlock Grid.Row="0" Text="设置" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+
+    <ScrollViewer Grid.Row="1"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Padding="0,0,12,18">
+      <StackPanel Spacing="16" MaxWidth="760" HorizontalAlignment="Left">
+
+    <!-- Appearance -->
+    <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="18"
+                       Padding="18">
+      <StackPanel Spacing="14">
+        <TextBlock Text="外观与界面" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2">
+            <TextBlock Text="主题模式" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="暗色影院模式在夜间观影更护眼" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding IsDarkTheme}"
+                    Content="深色影院"
+                    Command="{Binding SetThemeCommand}"
+                    CommandParameter="{x:True}" />
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding !IsDarkTheme}"
+                    Content="浅色日间"
+                    Command="{Binding SetThemeCommand}"
+                    CommandParameter="{x:False}" />
+          </StackPanel>
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2">
+            <TextBlock Text="小窗看剧窗口置顶" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="切换到小窗模式时自动保持在桌面最前端" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <ToggleSwitch Grid.Column="1"
+                        AutomationProperties.Name="小窗看剧窗口置顶"
+                        IsChecked="{Binding MiniAlwaysOnTop, Mode=TwoWay}"
+                        OnContent="开"
+                        OffContent="关" />
+        </Grid>
+      </StackPanel>
+    </aviora:AvioraCard>
+
+    <!-- Playback -->
+    <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="18"
+                       Padding="18">
+      <StackPanel Spacing="14">
+        <TextBlock Text="播放偏好" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2">
+            <TextBlock Text="默认清晰度" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="优先选择的播放画质（网络波动时自动平滑降级）" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="pill-btn" Classes.active="{Binding IsQuality1080}" Content="1080P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="1080" />
+            <Button Classes="pill-btn" Classes.active="{Binding IsQuality720}" Content="720P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="720" />
+            <Button Classes="pill-btn" Classes.active="{Binding IsQuality480}" Content="480P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="480" />
+          </StackPanel>
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="视频渲染方式" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="GPU 纹理支持叠加控件；NativeSurface 采用独立硬件表面，控制栏自动外置到底部" FontSize="{DynamicResource AppMinFontSize}" TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="pill-btn" Classes.active="{Binding IsRenderAuto}" Content="自动" Command="{Binding SetRenderModeCommand}" CommandParameter="{x:Static models:VideoRenderMode.Auto}" />
+            <Button Classes="pill-btn" Classes.active="{Binding IsRenderGpu}" Content="GPU 纹理" Command="{Binding SetRenderModeCommand}" CommandParameter="{x:Static models:VideoRenderMode.GpuComposition}" />
+            <Button Classes="pill-btn" Classes.active="{Binding IsRenderSoftware}" Content="软件渲染" Command="{Binding SetRenderModeCommand}" CommandParameter="{x:Static models:VideoRenderMode.SoftwareBitmap}" />
+            <Button Classes="pill-btn" Classes.active="{Binding IsRenderNative}" Content="NativeSurface" Command="{Binding SetRenderModeCommand}" CommandParameter="{x:Static models:VideoRenderMode.NativeSurface}" />
+          </StackPanel>
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="单集播完自动连播下一集" VerticalAlignment="Center" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextPrimaryBrush}" />
+          <ToggleSwitch Grid.Column="1"
+                        AutomationProperties.Name="单集播完自动连播下一集"
+                        IsChecked="{Binding AutoPlayNext, Mode=TwoWay}"
+                        OnContent="开"
+                        OffContent="关" />
+        </Grid>
+
+      </StackPanel>
+    </aviora:AvioraCard>
+
+    <!-- Storage & Service -->
+    <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="18"
+                       Padding="18">
+      <StackPanel Spacing="14">
+        <TextBlock Text="存储与服务" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="离线下载目录" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="{Binding DownloadDirectory}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="surface-btn" Content="更改目录" Click="OnChooseDownloadDirectoryClick" />
+        </Grid>
+        <TextBlock Text="更改目录仅影响新任务，已有下载保留在原目录。" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="视频源服务地址" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <Border Grid.Column="1"
+                    Background="{DynamicResource AccentSoftBrush}"
+                    CornerRadius="999"
+                    Padding="8,2">
+              <TextBlock Text="{Binding SourceStatusText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource AccentRoseBrush}" />
+            </Border>
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <TextBox AutomationProperties.Name="视频源服务地址"
+                     Text="{Binding GatewayBaseUrl, Mode=TwoWay}"
+                     PlaceholderText="http://127.0.0.1:8080"
+                     CornerRadius="10"
+                     Height="36"
+                     VerticalContentAlignment="Center" />
+            <Button Grid.Column="1"
+                    Classes="brand-cta"
+                    Content="连接并同步"
+                    Command="{Binding TestGatewayCommand}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <TextBox AutomationProperties.Name="访问令牌"
+                     Text="{Binding GatewayToken, Mode=TwoWay}"
+                     PlaceholderText="访问令牌（Bearer Token，服务端开启鉴权时必填）"
+                     PasswordChar="{Binding TokenPasswordChar}"
+                     CornerRadius="10"
+                     Height="34"
+                     VerticalContentAlignment="Center" />
+            <Button Grid.Column="1"
+                    Classes="surface-btn"
+                    MinWidth="68"
+                    HorizontalContentAlignment="Center"
+                    Content="{Binding TokenVisibilityButtonText}"
+                    Command="{Binding ToggleTokenVisibilityCommand}" />
+          </Grid>
+          <TextBlock Text="若服务端已开启访问鉴权，请填写配置中的访问令牌后点击“连接并同步”，配置会自动保存在本地。"
+                     FontSize="{DynamicResource AppMinFontSize}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}" />
+        </StackPanel>
+      </StackPanel>
+    </aviora:AvioraCard>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

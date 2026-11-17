@@ -1,0 +1,1103 @@
+using System.Collections.ObjectModel;
+using Aviora.Presentation.Dialogs;
+using Aviora.Presentation.Loadings;
+using Aviora.Presentation.Toasts;
+using MioReel.Core.Abstractions;
+using MioReel.Core.Models;
+using ReactiveUI;
+using ReactiveUI.Primitives;
+
+namespace MioReel.Desktop.ViewModels;
+
+public sealed class MainWindowViewModel : ReactiveObject
+{
+    private readonly IDramaCatalogService _catalog;
+    private readonly IHistoryService _history;
+    private readonly IDownloadService _downloads;
+    private readonly ISettingsService _settings;
+    private readonly IDialogService _dialogs;
+    private readonly ILoadingService _loading;
+    private readonly IToastService _toast;
+
+    private CancellationTokenSource? _searchDebounceCts;
+    private CancellationTokenSource? _catalogCts;
+    private CancellationTokenSource? _searchRequestCts;
+    private CancellationTokenSource? _heroDisarmCts;
+    private NavSection _currentSection = NavSection.Explore;
+    private NavItemViewModel _selectedNavItem = null!;
+    private WindowLayoutMode _layoutMode = WindowLayoutMode.Wide;
+    private DramaCategory _selectedCategory = DramaCategory.All;
+    private DramaCardViewModel? _spotlightDrama;
+    private DramaCardViewModel? _resumeDrama;
+    private string _searchQuery = string.Empty;
+    private int _selectedDownloadTab;
+    private bool _isDarkTheme = true;
+    private bool _miniAlwaysOnTop = true;
+    private int _defaultQuality = 1080;
+    private bool _autoPlayNext = true;
+    private string _downloadDirectory = string.Empty;
+    private string _gatewayBaseUrl = string.Empty;
+    private string _gatewayToken = string.Empty;
+    private int _exploreColumns = 5;
+    private int _searchColumns = 2;
+    private int _historyColumns = 2;
+    private int _catalogPage = 1;
+    private bool _hasMoreCatalog;
+    private bool _isLoadingCatalog;
+    private bool _isLoadingMoreCatalog;
+    private bool _isLiveSource;
+    private string? _catalogErrorMessage;
+    private GatewayFailureKind _catalogFailureKind = GatewayFailureKind.None;
+    private bool _isTokenVisible;
+    private bool _isHeroFlightEnabled;
+    private bool _pendingHistoryRefresh;
+    private bool _isSearching;
+    private string? _searchErrorMessage;
+
+    public MainWindowViewModel(
+        IDramaCatalogService catalog,
+        IHistoryService history,
+        IDownloadService downloads,
+        ISettingsService settings,
+        IDialogService dialogs,
+        ILoadingService loading,
+        IToastService toast,
+        PlayerViewModel player)
+    {
+        _catalog = catalog;
+        _history = history;
+        _downloads = downloads;
+        _settings = settings;
+        _dialogs = dialogs;
+        _loading = loading;
+        _toast = toast;
+        Player = player;
+        Player.HistoryUpdated += OnPlayerHistoryUpdated;
+        Player.ClosingRequested += OnPlayerClosingRequested;
+
+        var s = settings.Current;
+        _isDarkTheme = s.Theme == AppThemePreference.Dark;
+        _miniAlwaysOnTop = s.MiniWindowAlwaysOnTop;
+        _defaultQuality = s.DefaultQuality;
+        _autoPlayNext = s.AutoPlayNextEpisode;
+        _downloadDirectory = s.DownloadDirectory;
+        _gatewayBaseUrl = s.GatewayBaseUrl;
+        _gatewayToken = s.GatewayToken;
+
+        RecentSearches = [];
+        NavItems =
+        [
+            new(NavSection.Explore, "片库", "片库", "M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z"),
+            new(NavSection.Search, "搜索", "搜索", "M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z"),
+            new(NavSection.History, "浏览历史", "历史", "M13 3C8.03 3 4 7.03 4 12H1L4.89 15.89L4.96 16.03L9 12H6C6 8.13 9.13 5 13 5C16.87 5 20 8.13 20 12C20 15.87 16.87 19 13 19C11.07 19 9.32 18.21 8.06 16.94L6.64 18.36C8.27 19.99 10.51 21 13 21C17.97 21 22 16.97 22 12C22 7.03 17.97 3 13 3ZM12 8V13L16.28 15.54L17 14.33L13.5 12.25V8H12Z"),
+            new(NavSection.Downloads, "离线下载", "下载", "M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"),
+            new(NavSection.Settings, "设置", "设置", "M19.14 12.94C19.18 12.64 19.2 12.33 19.2 12C19.2 11.68 19.18 11.36 19.13 11.06L21.16 9.48C21.34 9.34 21.39 9.07 21.28 8.87L19.36 5.55C19.24 5.33 18.99 5.26 18.77 5.33L16.38 6.29C15.88 5.91 15.35 5.59 14.76 5.35L14.4 2.81C14.36 2.57 14.16 2.4 13.92 2.4H10.08C9.84 2.4 9.65 2.57 9.61 2.81L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33C5.02 5.25 4.77 5.33 4.65 5.55L2.74 8.87C2.62 9.08 2.66 9.34 2.86 9.48L4.89 11.06C4.84 11.36 4.8 11.69 4.8 12C4.8 12.31 4.82 12.64 4.87 12.94L2.84 14.52C2.66 14.66 2.61 14.93 2.72 15.13L4.64 18.45C4.76 18.67 5.01 18.74 5.23 18.67L7.62 17.71C8.12 18.09 8.65 18.41 9.24 18.65L9.6 21.19C9.65 21.43 9.84 21.6 10.08 21.6H13.92C14.16 21.6 14.36 21.43 14.39 21.19L14.75 18.65C15.34 18.41 15.88 18.09 16.37 17.71L18.76 18.67C18.98 18.75 19.23 18.67 19.35 18.45L21.27 15.13C21.39 14.91 21.34 14.66 21.15 14.52L19.14 12.94ZM12 15.6C10.02 15.6 8.4 13.98 8.4 12C8.4 10.02 10.02 8.4 12 8.4C13.98 8.4 15.6 10.02 15.6 12C15.6 13.98 13.98 15.6 12 15.6Z")
+        ];
+        _selectedNavItem = NavItems[0];
+
+        NavigateCommand = ReactiveCommand.Create<NavSection>(section => CurrentSection = section);
+        SelectCategoryCommand = ReactiveCommand.CreateFromTask<DramaCategory>(SelectCategoryAsync);
+        OpenDramaCommand = ReactiveCommand.CreateFromTask<DramaCardViewModel>(OpenDramaWithHeroAsync);
+        OpenBatchDownloadCommand = ReactiveCommand.CreateFromTask<DramaItem>(OpenBatchDownloadDialogAsync);
+        ExecuteSearchCommand = ReactiveCommand.CreateFromTask(ExecuteSearchAsync);
+        ApplySearchTagCommand = ReactiveCommand.CreateFromTask<string>(async tag =>
+        {
+            SearchQuery = tag;
+            await ExecuteSearchAsync();
+        });
+        ClearRecentSearchCommand = ReactiveCommand.Create(() =>
+        {
+            RecentSearches.Clear();
+            this.RaisePropertyChanged(nameof(HasRecentSearches));
+        });
+        RemoveHistoryCommand = ReactiveCommand.Create<string>(seriesId =>
+        {
+            _history.Remove(seriesId);
+            RefreshHistory();
+        });
+        ClearHistoryCommand = ReactiveCommand.CreateFromTask(ConfirmClearHistoryAsync);
+        SelectDownloadTabCommand = ReactiveCommand.Create<string>(tab =>
+        {
+            SelectedDownloadTab = tab == "done" ? 1 : 0;
+            RefreshDownloads();
+        });
+        ToggleDownloadPauseCommand = ReactiveCommand.Create<string>(taskId =>
+        {
+            try { _downloads.TogglePause(taskId); }
+            catch (Exception ex) { _toast.ShowError($"无法更新下载任务：{ex.Message}"); }
+            RefreshDownloads();
+        });
+        RemoveDownloadCommand = ReactiveCommand.Create<string>(taskId =>
+        {
+            try { _downloads.Remove(taskId); }
+            catch (Exception ex) { _toast.ShowError($"无法移除下载任务：{ex.Message}"); }
+            RefreshDownloads();
+        });
+        SetThemeCommand = ReactiveCommand.Create<bool>(dark =>
+        {
+            IsDarkTheme = dark;
+            SaveSettings();
+            ThemeChanged?.Invoke(dark);
+        });
+        SetDefaultQualityCommand = ReactiveCommand.Create<string>(q =>
+        {
+            if (int.TryParse(q, out var val))
+                DefaultQuality = val;
+        });
+        SetRenderModeCommand = ReactiveCommand.Create<VideoRenderMode>(mode => Player.SetRenderMode(mode));
+        TestGatewayCommand = ReactiveCommand.CreateFromTask(TestGatewayAsync);
+        ToggleTokenVisibilityCommand = ReactiveCommand.Create(() => { IsTokenVisible = !IsTokenVisible; });
+        RefreshCatalogCommand = ReactiveCommand.CreateFromTask(() => SelectCategoryAsync(SelectedCategory));
+        LoadMoreCatalogCommand = ReactiveCommand.CreateFromTask(LoadMoreCatalogAsync);
+        OpenSettingsCommand = ReactiveCommand.Create(() => { CurrentSection = NavSection.Settings; });
+        ClearTempCacheCommand = ReactiveCommand.Create(() => { _toast.ShowSuccess("已清理临时缓存"); });
+
+        Player.WhenAnyValue(x => x.IsOpen)
+            .Subscribe(isOpen =>
+            {
+                if (!isOpen)
+                    ScheduleHeroDisarm();
+            });
+        Player.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlayerViewModel.RenderMode))
+            {
+                this.RaisePropertyChanged(nameof(IsRenderAuto));
+                this.RaisePropertyChanged(nameof(IsRenderGpu));
+                this.RaisePropertyChanged(nameof(IsRenderSoftware));
+                this.RaisePropertyChanged(nameof(IsRenderNative));
+            }
+        };
+
+        _ = InitializeAsync();
+    }
+
+    public event Action<bool>? ThemeChanged;
+
+    public PlayerViewModel Player { get; }
+
+    public IReadOnlyList<NavItemViewModel> NavItems { get; }
+    public ObservableCollection<DramaCardViewModel> ExploreCards { get; } = [];
+    public ObservableCollection<DramaCardRowViewModel> ExploreRows { get; } = [];
+    public ObservableCollection<DramaCardViewModel> SearchResults { get; } = [];
+    public ObservableCollection<DramaCardRowViewModel> SearchRows { get; } = [];
+    public ObservableCollection<string> RecentSearches { get; }
+    public ObservableCollection<HistoryItemViewModel> TodayHistory { get; } = [];
+    public ObservableCollection<HistoryItemViewModel> EarlierHistory { get; } = [];
+    public ObservableCollection<HistoryRowEntry> HistoryRows { get; } = [];
+    public ObservableCollection<DownloadItemViewModel> VisibleDownloads { get; } = [];
+
+    public ReactiveCommand<NavSection, RxVoid> NavigateCommand { get; }
+    public ReactiveCommand<DramaCategory, RxVoid> SelectCategoryCommand { get; }
+    public ReactiveCommand<DramaCardViewModel, RxVoid> OpenDramaCommand { get; }
+    public ReactiveCommand<DramaItem, RxVoid> OpenBatchDownloadCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExecuteSearchCommand { get; }
+    public ReactiveCommand<string, RxVoid> ApplySearchTagCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearRecentSearchCommand { get; }
+    public ReactiveCommand<string, RxVoid> RemoveHistoryCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearHistoryCommand { get; }
+    public ReactiveCommand<string, RxVoid> SelectDownloadTabCommand { get; }
+    public ReactiveCommand<string, RxVoid> ToggleDownloadPauseCommand { get; }
+    public ReactiveCommand<string, RxVoid> RemoveDownloadCommand { get; }
+    public ReactiveCommand<bool, RxVoid> SetThemeCommand { get; }
+    public ReactiveCommand<string, RxVoid> SetDefaultQualityCommand { get; }
+    public ReactiveCommand<VideoRenderMode, RxVoid> SetRenderModeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> TestGatewayCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleTokenVisibilityCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCatalogCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> LoadMoreCatalogCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSettingsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearTempCacheCommand { get; }
+
+    public NavSection CurrentSection
+    {
+        get => _currentSection;
+        set
+        {
+            if (_currentSection == value) return;
+            this.RaiseAndSetIfChanged(ref _currentSection, value);
+            var matched = NavItems.FirstOrDefault(x => x.Section == value);
+            if (matched is not null && !ReferenceEquals(_selectedNavItem, matched))
+                this.RaiseAndSetIfChanged(ref _selectedNavItem, matched, nameof(SelectedNavItem));
+            this.RaisePropertyChanged(nameof(IsExploreActive));
+            this.RaisePropertyChanged(nameof(IsSearchActive));
+            this.RaisePropertyChanged(nameof(IsHistoryActive));
+            this.RaisePropertyChanged(nameof(IsDownloadsActive));
+            this.RaisePropertyChanged(nameof(IsSettingsActive));
+        }
+    }
+
+    public NavItemViewModel SelectedNavItem
+    {
+        get => _selectedNavItem;
+        set
+        {
+            if (value is null || ReferenceEquals(_selectedNavItem, value)) return;
+            this.RaiseAndSetIfChanged(ref _selectedNavItem, value);
+            CurrentSection = value.Section;
+        }
+    }
+
+    public WindowLayoutMode LayoutMode
+    {
+        get => _layoutMode;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _layoutMode, value);
+            this.RaisePropertyChanged(nameof(ShowLeftSidebar));
+            this.RaisePropertyChanged(nameof(ShowSidebarLabels));
+            this.RaisePropertyChanged(nameof(ShowBottomNav));
+            this.RaisePropertyChanged(nameof(SidebarWidth));
+        }
+    }
+
+    public DramaCategory SelectedCategory
+    {
+        get => _selectedCategory;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedCategory, value);
+            this.RaisePropertyChanged(nameof(IsAllCategory));
+            this.RaisePropertyChanged(nameof(IsRealCategory));
+            this.RaisePropertyChanged(nameof(IsComicCategory));
+            this.RaisePropertyChanged(nameof(IsAiCategory));
+        }
+    }
+
+    public DramaCardViewModel? SpotlightDrama
+    {
+        get => _spotlightDrama;
+        private set => this.RaiseAndSetIfChanged(ref _spotlightDrama, value);
+    }
+
+    public DramaCardViewModel? ResumeDrama
+    {
+        get => _resumeDrama;
+        private set => this.RaiseAndSetIfChanged(ref _resumeDrama, value);
+    }
+
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            if (_searchQuery == value) return;
+            this.RaiseAndSetIfChanged(ref _searchQuery, value);
+            this.RaisePropertyChanged(nameof(SearchHeaderTitle));
+            this.RaisePropertyChanged(nameof(EmptySearchText));
+            DebounceSearch();
+        }
+    }
+
+    private void DebounceSearch()
+    {
+        _searchDebounceCts?.Cancel();
+        var cts = _searchDebounceCts = new CancellationTokenSource();
+        _ = Task.Delay(180, cts.Token).ContinueWith(
+            t =>
+            {
+                if (!t.IsCanceled)
+                    _ = ExecuteSearchAsync();
+            },
+            TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    public int SelectedDownloadTab
+    {
+        get => _selectedDownloadTab;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedDownloadTab, value);
+            this.RaisePropertyChanged(nameof(IsActiveDlTab));
+            this.RaisePropertyChanged(nameof(IsDoneDlTab));
+        }
+    }
+
+    public bool IsDarkTheme
+    {
+        get => _isDarkTheme;
+        set => this.RaiseAndSetIfChanged(ref _isDarkTheme, value);
+    }
+
+    public bool MiniAlwaysOnTop
+    {
+        get => _miniAlwaysOnTop;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _miniAlwaysOnTop, value);
+            SaveSettings();
+        }
+    }
+
+    public int DefaultQuality
+    {
+        get => _defaultQuality;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _defaultQuality, value);
+            this.RaisePropertyChanged(nameof(IsQuality1080));
+            this.RaisePropertyChanged(nameof(IsQuality720));
+            this.RaisePropertyChanged(nameof(IsQuality480));
+            SaveSettings();
+        }
+    }
+
+    public bool IsQuality1080 => DefaultQuality == 1080;
+    public bool IsQuality720 => DefaultQuality == 720;
+    public bool IsQuality480 => DefaultQuality == 480;
+
+    public bool IsRenderAuto => Player.RenderMode == VideoRenderMode.Auto;
+    public bool IsRenderGpu => Player.RenderMode == VideoRenderMode.GpuComposition;
+    public bool IsRenderSoftware => Player.RenderMode == VideoRenderMode.SoftwareBitmap;
+    public bool IsRenderNative => Player.RenderMode == VideoRenderMode.NativeSurface;
+
+    public bool AutoPlayNext
+    {
+        get => _autoPlayNext;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _autoPlayNext, value);
+            SaveSettings();
+        }
+    }
+
+    public string DownloadDirectory
+    {
+        get => _downloadDirectory;
+        set
+        {
+            if (string.Equals(_downloadDirectory, value, StringComparison.Ordinal)) return;
+            this.RaiseAndSetIfChanged(ref _downloadDirectory, value);
+            SaveSettings();
+        }
+    }
+
+    public string GatewayBaseUrl
+    {
+        get => _gatewayBaseUrl;
+        set
+        {
+            if (string.Equals(_gatewayBaseUrl, value, StringComparison.Ordinal)) return;
+            this.RaiseAndSetIfChanged(ref _gatewayBaseUrl, value);
+            SaveSettings();
+        }
+    }
+
+    public string GatewayToken
+    {
+        get => _gatewayToken;
+        set
+        {
+            if (string.Equals(_gatewayToken, value, StringComparison.Ordinal)) return;
+            this.RaiseAndSetIfChanged(ref _gatewayToken, value);
+            SaveSettings();
+        }
+    }
+
+    public bool IsTokenVisible
+    {
+        get => _isTokenVisible;
+        set
+        {
+            if (_isTokenVisible == value) return;
+            this.RaiseAndSetIfChanged(ref _isTokenVisible, value);
+            this.RaisePropertyChanged(nameof(TokenPasswordChar));
+            this.RaisePropertyChanged(nameof(TokenVisibilityButtonText));
+        }
+    }
+
+    public char TokenPasswordChar => IsTokenVisible ? '\0' : '•';
+    public string TokenVisibilityButtonText => IsTokenVisible ? "隐藏" : "显示";
+
+    public bool IsHeroFlightEnabled
+    {
+        get => _isHeroFlightEnabled;
+        private set => this.RaiseAndSetIfChanged(ref _isHeroFlightEnabled, value);
+    }
+
+    public bool HasMoreCatalog
+    {
+        get => _hasMoreCatalog;
+        private set => this.RaiseAndSetIfChanged(ref _hasMoreCatalog, value);
+    }
+
+    public bool IsLoadingCatalog
+    {
+        get => _isLoadingCatalog;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isLoadingCatalog, value);
+            RaiseExploreStateProperties();
+        }
+    }
+
+    public bool IsLoadingMoreCatalog
+    {
+        get => _isLoadingMoreCatalog;
+        private set
+        {
+            if (_isLoadingMoreCatalog == value) return;
+            this.RaiseAndSetIfChanged(ref _isLoadingMoreCatalog, value);
+            this.RaisePropertyChanged(nameof(LoadMoreButtonText));
+        }
+    }
+
+    public string LoadMoreButtonText => IsLoadingMoreCatalog ? "正在加载更多剧集..." : "加载更多剧集";
+
+    public string? CatalogErrorMessage
+    {
+        get => _catalogErrorMessage;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _catalogErrorMessage, value);
+            RaiseExploreStateProperties();
+            this.RaisePropertyChanged(nameof(CatalogErrorTitle));
+            this.RaisePropertyChanged(nameof(SourceStatusText));
+        }
+    }
+
+    public GatewayFailureKind CatalogFailureKind
+    {
+        get => _catalogFailureKind;
+        private set
+        {
+            if (_catalogFailureKind == value) return;
+            this.RaiseAndSetIfChanged(ref _catalogFailureKind, value);
+            this.RaisePropertyChanged(nameof(CatalogErrorTitle));
+            this.RaisePropertyChanged(nameof(SourceStatusText));
+        }
+    }
+
+    public string CatalogErrorTitle => CatalogFailureKind switch
+    {
+        GatewayFailureKind.Unauthorized => "视频源需要访问令牌",
+        GatewayFailureKind.Forbidden => "视频源拒绝访问",
+        GatewayFailureKind.InvalidConfig => "视频源地址配置无效",
+        GatewayFailureKind.GatewayError or GatewayFailureKind.InvalidResponse => "片库服务返回异常",
+        _ => "暂未连接到视频源"
+    };
+
+    public bool HasCatalogError => !string.IsNullOrWhiteSpace(CatalogErrorMessage);
+    public bool ShowExploreList => !IsLoadingCatalog && !HasCatalogError && ExploreCards.Count > 0;
+    public bool ShowExploreEmpty => !IsLoadingCatalog && !HasCatalogError && ExploreCards.Count == 0;
+
+    public bool IsSearching
+    {
+        get => _isSearching;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isSearching, value);
+            RaiseSearchStateProperties();
+        }
+    }
+
+    public string? SearchErrorMessage
+    {
+        get => _searchErrorMessage;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _searchErrorMessage, value);
+            RaiseSearchStateProperties();
+        }
+    }
+
+    public bool HasSearchError => !string.IsNullOrWhiteSpace(SearchErrorMessage);
+    public bool ShowSearchList => !IsSearching && !HasSearchError && SearchResults.Count > 0;
+    public bool ShowSearchEmpty => !IsSearching && !HasSearchError && SearchResults.Count == 0;
+    public bool HasRecentSearches => RecentSearches.Count > 0;
+    public bool HasResumeDrama => ResumeDrama is not null;
+
+    public bool IsLiveSource
+    {
+        get => _isLiveSource;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isLiveSource, value);
+            this.RaisePropertyChanged(nameof(SourceStatusText));
+        }
+    }
+
+    public string SourceStatusText => IsLiveSource
+        ? "已连接在线片库"
+        : CatalogFailureKind switch
+        {
+            GatewayFailureKind.Unauthorized => "需要访问令牌 (401)",
+            GatewayFailureKind.Forbidden => "访问受限 (403)",
+            GatewayFailureKind.InvalidConfig => "地址配置无效",
+            _ => HasCatalogError ? "未连接视频源" : "等待连接"
+        };
+
+    public bool IsExploreActive => CurrentSection == NavSection.Explore;
+    public bool IsSearchActive => CurrentSection == NavSection.Search;
+    public bool IsHistoryActive => CurrentSection == NavSection.History;
+    public bool IsDownloadsActive => CurrentSection == NavSection.Downloads;
+    public bool IsSettingsActive => CurrentSection == NavSection.Settings;
+
+    public bool ShowLeftSidebar => LayoutMode != WindowLayoutMode.Narrow;
+    public bool ShowSidebarLabels => LayoutMode == WindowLayoutMode.Wide;
+    public bool ShowBottomNav => LayoutMode == WindowLayoutMode.Narrow;
+    public double SidebarWidth => LayoutMode == WindowLayoutMode.Wide ? 196 : 68;
+
+    public bool IsAllCategory => SelectedCategory == DramaCategory.All;
+    public bool IsRealCategory => SelectedCategory == DramaCategory.RealDrama;
+    public bool IsComicCategory => SelectedCategory == DramaCategory.ComicDrama;
+    public bool IsAiCategory => SelectedCategory == DramaCategory.AiDrama;
+
+    public string CatalogCountText => $"共 {ExploreCards.Count} 部";
+    public string SearchHeaderTitle => string.IsNullOrWhiteSpace(SearchQuery) ? "搜索片源" : $"“{SearchQuery.Trim()}” 的搜索结果";
+    public string SearchResultCountText => $"{SearchResults.Count} 部";
+    public string EmptySearchText => string.IsNullOrWhiteSpace(SearchQuery) ? "输入剧名或关键词开始搜索" : "未找到相关短剧";
+
+    public bool IsActiveDlTab => SelectedDownloadTab == 0;
+    public bool IsDoneDlTab => SelectedDownloadTab == 1;
+
+    public int ActiveDownloadCount => _downloads.GetDownloads().Count(x => x.State != DownloadTaskState.Completed);
+    public int CompletedDownloadCount => _downloads.GetDownloads().Count(x => x.State == DownloadTaskState.Completed);
+    public string ActiveDlTabText => $"正在下载 ({ActiveDownloadCount})";
+    public string DoneDlTabText => $"已完成 ({CompletedDownloadCount})";
+    public bool HasActiveDownloads => ActiveDownloadCount > 0;
+    public bool HasVisibleDownloads => VisibleDownloads.Count > 0;
+    public string EmptyDownloadsText => SelectedDownloadTab == 1 ? "暂无已完成的下载任务" : "暂无正在下载的任务";
+
+    private void RaiseExploreStateProperties()
+    {
+        this.RaisePropertyChanged(nameof(HasCatalogError));
+        this.RaisePropertyChanged(nameof(ShowExploreList));
+        this.RaisePropertyChanged(nameof(ShowExploreEmpty));
+    }
+
+    private void RaiseSearchStateProperties()
+    {
+        this.RaisePropertyChanged(nameof(HasSearchError));
+        this.RaisePropertyChanged(nameof(ShowSearchList));
+        this.RaisePropertyChanged(nameof(ShowSearchEmpty));
+    }
+
+    public int TotalHistoryCount => TodayHistory.Count + EarlierHistory.Count;
+    public bool HasTodayHistory => TodayHistory.Count > 0;
+    public bool HasEarlierHistory => EarlierHistory.Count > 0;
+    public bool HasAnyHistory => TotalHistoryCount > 0;
+
+    public void FocusSearch() => CurrentSection = NavSection.Search;
+
+    private async Task InitializeAsync()
+    {
+        RefreshHistory();
+        RefreshDownloads();
+        await SelectCategoryAsync(DramaCategory.All);
+    }
+
+    public void UpdateExploreColumns(double availableWidth)
+    {
+        var cols = Math.Max(1, (int)((availableWidth + 14) / 192));
+        if (cols == _exploreColumns && ExploreRows.Count > 0) return;
+        _exploreColumns = cols;
+        RebuildExploreRows();
+    }
+
+    public void UpdateSearchColumns(double availableWidth)
+    {
+        var cols = Math.Max(1, (int)((availableWidth + 12) / 322));
+        if (cols == _searchColumns && SearchRows.Count > 0) return;
+        _searchColumns = cols;
+        RebuildSearchRows();
+    }
+
+    public void UpdateHistoryColumns(double availableWidth)
+    {
+        var cols = Math.Max(1, (int)((availableWidth + 12) / 342));
+        if (cols == _historyColumns && HistoryRows.Count > 0) return;
+        _historyColumns = cols;
+        RebuildHistoryRows();
+    }
+
+    private void RebuildExploreRows()
+    {
+        ExploreRows.Clear();
+        for (var i = 0; i < ExploreCards.Count; i += _exploreColumns)
+            ExploreRows.Add(new DramaCardRowViewModel(ExploreCards.Skip(i).Take(_exploreColumns).ToList()));
+    }
+
+    private int AppendExploreItems(
+        IReadOnlyList<DramaItem> items,
+        Dictionary<string, int> historyMap)
+    {
+        // Always deduplicate against the current collection, including the first page.
+        var existingIds = ExploreCards.Select(x => x.Drama.SeriesId).ToHashSet(StringComparer.Ordinal);
+        var startIndex = ExploreCards.Count;
+        var added = 0;
+        foreach (var item in items)
+        {
+            if (!existingIds.Add(item.SeriesId)) continue;
+            historyMap.TryGetValue(item.SeriesId, out var watchedEp);
+            ExploreCards.Add(new DramaCardViewModel(item, $"explore-{item.SeriesId}", watchedEp));
+            added++;
+        }
+
+        if (added == 0)
+            return 0;
+
+        // 直接向末行追加卡片而非替换整行，防止已有卡片卸载/重挂触发 Hero 动画且保持滚动位置
+        var cursor = startIndex;
+        if (ExploreRows.Count > 0 && ExploreRows[^1].Items.Count < _exploreColumns)
+        {
+            var tailRow = ExploreRows[^1];
+            while (cursor < ExploreCards.Count && tailRow.Items.Count < _exploreColumns)
+            {
+                tailRow.Items.Add(ExploreCards[cursor++]);
+            }
+        }
+
+        for (var i = cursor; i < ExploreCards.Count; i += _exploreColumns)
+            ExploreRows.Add(new DramaCardRowViewModel(ExploreCards.Skip(i).Take(_exploreColumns).ToList()));
+
+        return added;
+    }
+
+    private Task OpenDramaWithHeroAsync(DramaCardViewModel card)
+    {
+        _heroDisarmCts?.Cancel();
+        IsHeroFlightEnabled = true;
+        ScheduleHeroDisarm();
+        return Player.OpenAsync(card);
+    }
+
+    private void OnPlayerClosingRequested(bool wasMiniMode)
+    {
+        _heroDisarmCts?.Cancel();
+        if (wasMiniMode)
+        {
+            // Closing from MiniMode triggers a 360->1260 window resize; keep Hero disabled so background list relayouts never fly.
+            IsHeroFlightEnabled = false;
+            return;
+        }
+
+        IsHeroFlightEnabled = true;
+        ScheduleHeroDisarm();
+    }
+
+    private async void ScheduleHeroDisarm()
+    {
+        _heroDisarmCts?.Cancel();
+        var cts = _heroDisarmCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(450, cts.Token);
+            if (!cts.IsCancellationRequested)
+            {
+                IsHeroFlightEnabled = false;
+                if (!Player.IsOpen && _pendingHistoryRefresh)
+                {
+                    _pendingHistoryRefresh = false;
+                    RefreshHistory();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void OnPlayerHistoryUpdated()
+    {
+        // Defer rebuilding HistoryRows while Player is open or Hero return flight is animating so History cards stay intact.
+        if (Player.IsOpen || IsHeroFlightEnabled)
+        {
+            _pendingHistoryRefresh = true;
+            return;
+        }
+
+        _pendingHistoryRefresh = false;
+        RefreshHistory();
+    }
+
+    private void RebuildSearchRows()
+    {
+        SearchRows.Clear();
+        for (var i = 0; i < SearchResults.Count; i += _searchColumns)
+            SearchRows.Add(new DramaCardRowViewModel(SearchResults.Skip(i).Take(_searchColumns).ToList()));
+    }
+
+    private void RebuildHistoryRows()
+    {
+        HistoryRows.Clear();
+        if (TodayHistory.Count > 0)
+        {
+            HistoryRows.Add(new HistoryRowEntry("今天"));
+            for (var i = 0; i < TodayHistory.Count; i += _historyColumns)
+                HistoryRows.Add(new HistoryRowEntry(TodayHistory.Skip(i).Take(_historyColumns).ToList()));
+        }
+
+        if (EarlierHistory.Count > 0)
+        {
+            HistoryRows.Add(new HistoryRowEntry("更早"));
+            for (var i = 0; i < EarlierHistory.Count; i += _historyColumns)
+                HistoryRows.Add(new HistoryRowEntry(EarlierHistory.Skip(i).Take(_historyColumns).ToList()));
+        }
+    }
+
+    private async Task SelectCategoryAsync(DramaCategory category)
+    {
+        _catalogCts?.Cancel();
+        var cts = _catalogCts = new CancellationTokenSource();
+        SelectedCategory = category;
+        _catalogPage = 1;
+        CatalogFailureKind = GatewayFailureKind.None;
+        CatalogErrorMessage = null;
+        IsLoadingCatalog = true;
+        // The initial request and automatic prefetch own the pagination cursor until completion.
+        IsLoadingMoreCatalog = true;
+
+        try
+        {
+            var pageResult = await _catalog.GetCatalogPageAsync(category, _catalogPage, 100, cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            IsLiveSource = pageResult.IsLiveGateway;
+            HasMoreCatalog = pageResult.HasMore;
+
+            var historyMap = _history.GetHistory().ToDictionary(x => x.Drama.SeriesId, x => x.LastEpisodeNo);
+
+            ExploreCards.Clear();
+            ExploreRows.Clear();
+            AppendExploreItems(pageResult.Items, historyMap);
+
+            if (pageResult.Items.Count > 0 && (SpotlightDrama is null || category == DramaCategory.All))
+            {
+                historyMap.TryGetValue(pageResult.Items[0].SeriesId, out var watchedEp);
+                SpotlightDrama = new DramaCardViewModel(pageResult.Items[0], $"spotlight-{pageResult.Items[0].SeriesId}", watchedEp);
+                if (ResumeDrama is null)
+                {
+                    ResumeDrama = SpotlightDrama;
+                    this.RaisePropertyChanged(nameof(HasResumeDrama));
+                }
+            }
+            else if (pageResult.Items.Count == 0 && category == DramaCategory.All)
+            {
+                SpotlightDrama = null;
+            }
+
+            // 首屏立即显示后，若片源较少且仍有下一页，连续预取至多 48 部片源保证片库饱满
+            IsLoadingCatalog = false;
+            this.RaisePropertyChanged(nameof(CatalogCountText));
+            RaiseExploreStateProperties();
+
+            while (!cts.IsCancellationRequested && HasMoreCatalog && ExploreCards.Count < 48 && _catalogPage < 4)
+            {
+                var nextPage = _catalogPage + 1;
+                var nextResult = await _catalog.GetCatalogPageAsync(category, nextPage, 100, cts.Token);
+                if (cts.IsCancellationRequested) return;
+
+                _catalogPage = nextPage;
+                HasMoreCatalog = nextResult.HasMore;
+                var added = AppendExploreItems(nextResult.Items, historyMap);
+                this.RaisePropertyChanged(nameof(CatalogCountText));
+                RaiseExploreStateProperties();
+                if (added == 0 || nextResult.Items.Count == 0)
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception) when (cts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (GatewayException ex) when (ExploreCards.Count == 0)
+        {
+            IsLiveSource = false;
+            HasMoreCatalog = false;
+            ExploreCards.Clear();
+            ExploreRows.Clear();
+            SpotlightDrama = null;
+            CatalogFailureKind = ex.FailureKind;
+            CatalogErrorMessage = ex.UserMessage;
+        }
+        catch (GatewayException)
+        {
+            // 预取后续分页失败时保留已加载的首屏片源
+            HasMoreCatalog = false;
+        }
+        catch (Exception) when (ExploreCards.Count == 0)
+        {
+            IsLiveSource = false;
+            HasMoreCatalog = false;
+            ExploreCards.Clear();
+            ExploreRows.Clear();
+            SpotlightDrama = null;
+            CatalogFailureKind = GatewayFailureKind.Connection;
+            CatalogErrorMessage = "加载片库失败，请检查视频源连接后重试";
+        }
+        catch (Exception)
+        {
+            HasMoreCatalog = false;
+        }
+        finally
+        {
+            if (ReferenceEquals(_catalogCts, cts))
+            {
+                IsLoadingCatalog = false;
+                IsLoadingMoreCatalog = false;
+                this.RaisePropertyChanged(nameof(CatalogCountText));
+                RaiseExploreStateProperties();
+            }
+        }
+    }
+
+    private async Task LoadMoreCatalogAsync()
+    {
+        if (IsLoadingCatalog || IsLoadingMoreCatalog || !HasMoreCatalog) return;
+        IsLoadingMoreCatalog = true;
+        var activeCts = _catalogCts;
+        var activeCategory = SelectedCategory;
+        try
+        {
+            var historyMap = _history.GetHistory().ToDictionary(x => x.Drama.SeriesId, x => x.LastEpisodeNo);
+            var batchAdded = 0;
+
+            for (var step = 0; step < 2 && HasMoreCatalog && batchAdded < 24; step++)
+            {
+                if (activeCts is { IsCancellationRequested: true } || activeCategory != SelectedCategory)
+                    return;
+
+                var nextPage = _catalogPage + 1;
+                var result = await _catalog.GetCatalogPageAsync(
+                    activeCategory,
+                    nextPage,
+                    100,
+                    activeCts?.Token ?? CancellationToken.None);
+
+                if (activeCts is { IsCancellationRequested: true } || activeCategory != SelectedCategory)
+                    return;
+
+                IsLiveSource = result.IsLiveGateway;
+                if (result.Items.Count == 0)
+                {
+                    HasMoreCatalog = false;
+                    break;
+                }
+
+                _catalogPage = nextPage;
+                HasMoreCatalog = result.HasMore;
+                var added = AppendExploreItems(result.Items, historyMap);
+                batchAdded += added;
+                this.RaisePropertyChanged(nameof(CatalogCountText));
+                RaiseExploreStateProperties();
+                if (added == 0)
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception) when (activeCts is { IsCancellationRequested: true })
+        {
+            return;
+        }
+        catch (GatewayException ex)
+        {
+            _toast.ShowError(ex.UserMessage);
+        }
+        catch (Exception)
+        {
+            _toast.ShowError("加载更多剧集失败，请稍后重试");
+        }
+        finally
+        {
+            if (ReferenceEquals(_catalogCts, activeCts))
+                IsLoadingMoreCatalog = false;
+        }
+    }
+
+    private async Task ExecuteSearchAsync()
+    {
+        _searchRequestCts?.Cancel();
+        var cts = _searchRequestCts = new CancellationTokenSource();
+
+        var q = SearchQuery.Trim();
+        if (!string.IsNullOrEmpty(q) && !RecentSearches.Contains(q))
+        {
+            RecentSearches.Insert(0, q);
+            this.RaisePropertyChanged(nameof(HasRecentSearches));
+        }
+
+        SearchErrorMessage = null;
+        IsSearching = true;
+        try
+        {
+            var hits = await _catalog.SearchAsync(q, cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            IsLiveSource = _catalog.IsLastRequestLive;
+            var historyMap = _history.GetHistory().ToDictionary(x => x.Drama.SeriesId, x => x.LastEpisodeNo);
+
+            SearchResults.Clear();
+            foreach (var item in hits)
+            {
+                historyMap.TryGetValue(item.SeriesId, out var watchedEp);
+                SearchResults.Add(new DramaCardViewModel(item, $"search-{item.SeriesId}", watchedEp));
+            }
+            RebuildSearchRows();
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (GatewayException ex)
+        {
+            SearchResults.Clear();
+            SearchRows.Clear();
+            SearchErrorMessage = ex.UserMessage;
+        }
+        catch (Exception)
+        {
+            SearchResults.Clear();
+            SearchRows.Clear();
+            SearchErrorMessage = "搜索请求失败，请检查视频源服务状态";
+        }
+        finally
+        {
+            IsSearching = false;
+            this.RaisePropertyChanged(nameof(SearchResultCountText));
+            RaiseSearchStateProperties();
+        }
+    }
+
+    private void RefreshHistory()
+    {
+        var records = _history.GetHistory();
+        TodayHistory.Clear();
+        EarlierHistory.Clear();
+
+        foreach (var record in records)
+        {
+            var vm = new HistoryItemViewModel(record, $"history-{record.Drama.SeriesId}");
+            if (record.GroupTitle == "今天")
+                TodayHistory.Add(vm);
+            else
+                EarlierHistory.Add(vm);
+        }
+        RebuildHistoryRows();
+
+        ResumeDrama = records.Count > 0
+            ? new DramaCardViewModel(records[0].Drama, $"resume-{records[0].Drama.SeriesId}", records[0].LastEpisodeNo)
+            : SpotlightDrama;
+
+        this.RaisePropertyChanged(nameof(HasResumeDrama));
+        this.RaisePropertyChanged(nameof(TotalHistoryCount));
+        this.RaisePropertyChanged(nameof(HasTodayHistory));
+        this.RaisePropertyChanged(nameof(HasEarlierHistory));
+        this.RaisePropertyChanged(nameof(HasAnyHistory));
+    }
+
+    public void RefreshDownloadProgress() => RefreshDownloads();
+
+    private void RefreshDownloads()
+    {
+        var all = _downloads.GetDownloads();
+        var filtered = SelectedDownloadTab == 1
+            ? all.Where(x => x.State == DownloadTaskState.Completed)
+            : all.Where(x => x.State != DownloadTaskState.Completed);
+
+        var tasks = filtered.ToArray();
+        for (var i = VisibleDownloads.Count - 1; i >= 0; i--)
+            if (!tasks.Any(x => x.TaskId == VisibleDownloads[i].TaskId)) VisibleDownloads.RemoveAt(i);
+        for (var i = 0; i < tasks.Length; i++)
+        {
+            var task = tasks[i];
+            var existing = VisibleDownloads.FirstOrDefault(x => x.TaskId == task.TaskId);
+            if (existing is null) VisibleDownloads.Insert(i, new DownloadItemViewModel(task, $"dl-{task.Drama.SeriesId}-{task.TaskId}"));
+            else existing.Update(task);
+        }
+
+        this.RaisePropertyChanged(nameof(ActiveDownloadCount));
+        this.RaisePropertyChanged(nameof(CompletedDownloadCount));
+        this.RaisePropertyChanged(nameof(ActiveDlTabText));
+        this.RaisePropertyChanged(nameof(DoneDlTabText));
+        this.RaisePropertyChanged(nameof(HasActiveDownloads));
+        this.RaisePropertyChanged(nameof(HasVisibleDownloads));
+        this.RaisePropertyChanged(nameof(EmptyDownloadsText));
+    }
+
+    private async Task ConfirmClearHistoryAsync()
+    {
+        await _dialogs.ShowAsync(session => new ConfirmDialogViewModel(
+            "清空浏览历史",
+            "确定要清空全部观看记录吗？清空后将不再保留断点续播位置。",
+            () =>
+            {
+                _history.Clear();
+                RefreshHistory();
+                session.Close();
+            },
+            () => session.Close()));
+    }
+
+    private async Task OpenBatchDownloadDialogAsync(DramaItem? drama)
+    {
+        if (drama is null) return;
+        await _dialogs.ShowAsync(session => new BatchDownloadDialogViewModel(
+            drama,
+            DefaultQuality,
+            count =>
+            {
+                try
+                {
+                    _downloads.Enqueue(drama, count);
+                    RefreshDownloads();
+                    _toast.ShowSuccess($"已将《{drama.Title}》前 {count} 集加入离线下载");
+                    session.Close();
+                }
+                catch (Exception ex) { _toast.ShowError($"无法创建下载任务：{ex.Message}"); }
+            },
+            () => session.Close()));
+    }
+
+    private async Task TestGatewayAsync()
+    {
+        SaveSettings();
+        try
+        {
+            var health = await _loading.RunAsync(
+                () => _catalog.TestConnectionAsync(GatewayBaseUrl),
+                new LoadingRequest("正在校验服务连通性与鉴权..."));
+            if (health.IsHealthy)
+            {
+                await SelectCategoryAsync(SelectedCategory);
+                if (!string.IsNullOrWhiteSpace(SearchQuery) || IsSearchActive)
+                    await ExecuteSearchAsync();
+                else
+                    SearchErrorMessage = null;
+                _toast.ShowSuccess(health.Message);
+            }
+            else
+            {
+                IsLiveSource = false;
+                CatalogFailureKind = health.FailureKind;
+                CatalogErrorMessage = health.Message;
+                _toast.ShowError(health.Message);
+            }
+        }
+        catch (Exception)
+        {
+            _toast.ShowError("连接测试时发生异常，请检查地址与网络");
+        }
+    }
+
+    private void SaveSettings()
+    {
+        _settings.Update(_settings.Current with
+        {
+            Theme = IsDarkTheme ? AppThemePreference.Dark : AppThemePreference.Light,
+            MiniWindowAlwaysOnTop = MiniAlwaysOnTop,
+            DefaultQuality = DefaultQuality,
+            AutoPlayNextEpisode = AutoPlayNext,
+            DownloadDirectory = DownloadDirectory,
+            GatewayBaseUrl = GatewayBaseUrl,
+            GatewayToken = GatewayToken
+        });
+    }
+}

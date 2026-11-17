@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
+             xmlns:controls="using:MioReel.Desktop.Controls"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Views.SearchView"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" RowSpacing="16">
+    <aviora:AvioraCard Grid.Row="0"
+                       Margin="0,0,12,0"
+                       Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="18"
+                       Padding="16">
+      <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+          <TextBox AutomationProperties.Name="搜索输入框"
+                   Text="{Binding SearchQuery, Mode=TwoWay}"
+                   PlaceholderText="输入剧名、题材标签或关键词搜索..."
+                   CornerRadius="12"
+                   Height="38"
+                   Padding="12,8"
+                   VerticalContentAlignment="Center" />
+          <Button Grid.Column="1"
+                  Classes="brand-cta"
+                  Content="搜索"
+                  Command="{Binding ExecuteSearchCommand}" />
+        </Grid>
+
+        <StackPanel Spacing="8" IsVisible="{Binding HasRecentSearches}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="最近搜索" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+            <Button Grid.Column="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="4,0"
+                    FontSize="{DynamicResource AppMinFontSize}"
+                    Foreground="{DynamicResource TextMutedBrush}"
+                    Content="清空"
+                    Command="{Binding ClearRecentSearchCommand}" />
+          </Grid>
+          <ItemsControl ItemsSource="{Binding RecentSearches}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <Button Classes="surface-btn"
+                        Margin="0,0,6,6"
+                        Padding="10,4"
+                        CornerRadius="999"
+                        FontSize="{DynamicResource AppMinFontSize}"
+                        Content="{Binding}"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplySearchTagCommand}"
+                        CommandParameter="{Binding}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </aviora:AvioraCard>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,12,0">
+      <TextBlock Text="{Binding SearchHeaderTitle}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+      <TextBlock Grid.Column="1" Text="{Binding SearchResultCountText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+    </Grid>
+
+    <Grid Grid.Row="2">
+      <ItemsControl x:Name="SearchVirtualizedList"
+                    Classes="virtual-list"
+                    ItemsSource="{Binding SearchRows}"
+                    IsVisible="{Binding ShowSearchList}"
+                    Padding="2,8,12,18">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:DramaCardRowViewModel">
+          <ItemsControl ItemsSource="{Binding Items}"
+                        ClipToBounds="False"
+                        Margin="0,0,0,12">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="12" ClipToBounds="False" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DramaCardViewModel">
+                <Button Classes="drama-card-btn"
+                        Width="310"
+                        Padding="10"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).OpenDramaCommand}"
+                        CommandParameter="{Binding}">
+                  <Grid ColumnDefinitions="72,*" ColumnSpacing="12">
+                    <aviora:Hero Tag="{Binding HeroTag}"
+                                 CornerRadius="10"
+                                 Width="72"
+                                 Height="96">
+                      <controls:DramaCoverControl Drama="{Binding Drama}"
+                                                  CornerRadius="10"
+                                                  ShowTextOverlay="False" />
+                    </aviora:Hero>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                      <TextBlock Text="{Binding Title}"
+                                 FontSize="{DynamicResource AppMinFontSize}"
+                                 FontWeight="Bold"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                      <TextBlock Text="{Binding CategoryLabel}"
+                                 FontSize="{DynamicResource AppMinFontSize}"
+                                 Foreground="{DynamicResource AccentRoseBrush}" />
+                      <TextBlock Text="{Binding Intro}"
+                                 FontSize="{DynamicResource AppMinFontSize}"
+                                 MaxLines="2"
+                                 TextTrimming="CharacterEllipsis"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource TextMutedBrush}" />
+                    </StackPanel>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+      <StackPanel HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Spacing="12"
+                  IsVisible="{Binding IsSearching}">
+        <aviora:Loading IndicatorStyle="DoubleRing"
+                        Width="32"
+                        Height="32"
+                        IndicatorBrush="{DynamicResource AccentRoseBrush}" />
+        <TextBlock Text="正在搜索剧目..." FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+      </StackPanel>
+
+      <aviora:AvioraCard HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         MaxWidth="420"
+                         Margin="0,0,12,0"
+                         Background="{DynamicResource SurfaceBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
+                         BorderThickness="1"
+                         CornerRadius="18"
+                         Padding="24,20"
+                         IsVisible="{Binding HasSearchError}">
+        <StackPanel Spacing="10" HorizontalAlignment="Center">
+          <TextBlock Text="搜索暂不可用" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+          <TextBlock Text="{Binding SearchErrorMessage}" FontSize="{DynamicResource AppMinFontSize}" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+            <Button Classes="brand-cta" Content="重新搜索" Command="{Binding ExecuteSearchCommand}" />
+            <Button Classes="surface-btn" Content="配置服务地址" Command="{Binding OpenSettingsCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </aviora:AvioraCard>
+
+      <aviora:AvioraCard HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         Background="{DynamicResource SurfaceBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
+                         BorderThickness="1"
+                         CornerRadius="18"
+                         Padding="28,22"
+                         IsVisible="{Binding ShowSearchEmpty}">
+        <TextBlock Text="{Binding EmptySearchText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+      </aviora:AvioraCard>
+    </Grid>
+  </Grid>
+</UserControl>

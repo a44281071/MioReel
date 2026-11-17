@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Controls.PlayerMiniTopBar"
+             x:DataType="vm:PlayerViewModel">
+  <Border Padding="10,8"
+          Background="#D80B0C12">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBlock Text="{Binding MiniTitleText}"
+                 FontSize="{DynamicResource AppMinFontSize}"
+                 FontWeight="SemiBold"
+                 Foreground="#FFFFFF"
+                 TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <Button Classes="surface-btn"
+                AutomationProperties.Name="切换置顶"
+                ToolTip.Tip="{Binding MiniPinLabel}"
+                Width="26" Height="26" Padding="0"
+                Command="{Binding ToggleMiniPinCommand}">
+          <PathIcon Data="M8 3H16V5L15 6V10L18 13V15H13V22H11V15H6V13L9 10V6L8 5Z" Width="13" Height="13" />
+        </Button>
+        <Button x:Name="MiniRestoreWindowBtn"
+                Classes="brand-cta"
+                AutomationProperties.Name="还原大窗"
+                ToolTip.Tip="还原大窗"
+                Width="26" Height="26" Padding="0"
+                Command="{Binding ToggleMiniModeCommand}">
+          <PathIcon Data="M4 4H20V20H4ZM6 6V18H18V6Z" Width="13" Height="13" />
+        </Button>
+        <Button AutomationProperties.Name="关闭播放"
+                ToolTip.Tip="关闭播放"
+                Classes="surface-btn" Width="26" Height="26" Padding="0"
+                Command="{Binding CloseCommand}">
+          <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11" />
+        </Button>
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

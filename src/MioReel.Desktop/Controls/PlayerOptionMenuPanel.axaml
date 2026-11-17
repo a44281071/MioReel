@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Controls.PlayerOptionMenuPanel"
+             x:DataType="vm:PlayerViewModel">
+  <Grid>
+    <Border CornerRadius="14"
+            Background="{DynamicResource SurfaceSolidBrush}"
+            BorderBrush="{DynamicResource BorderStrongBrush}"
+            BorderThickness="1"
+            BoxShadow="0 10 28 0 #90000000">
+    </Border>
+    <StackPanel MinWidth="188" Margin="6" Spacing="4">
+      <TextBlock Text="{Binding ActiveMenuTitle}"
+                 FontSize="{DynamicResource AppMinFontSize}"
+                 FontWeight="SemiBold"
+                 Margin="10,4,10,2"
+                 Foreground="{DynamicResource TextMutedBrush}" />
+      <ScrollViewer MaxHeight="260"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding ActiveMenuOptions}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PlayerMenuOptionViewModel">
+              <Button Classes="player-menu-item"
+                      Classes.selected="{Binding IsSelected}"
+                      Command="{Binding $parent[UserControl].((vm:PlayerViewModel)DataContext).SelectMenuOptionCommand}"
+                      CommandParameter="{Binding}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Spacing="1">
+                    <TextBlock Text="{Binding Label}" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" IsVisible="{Binding HasSubtitle}" />
+                  </StackPanel>
+                  <Border Grid.Column="1" Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
+                          Background="{DynamicResource AccentRoseBrush}" IsVisible="{Binding IsSelected}" />
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+  </Grid>
+</UserControl>

@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MioReel.Desktop.Controls.DramaCoverControl">
+  <Border x:Name="RootBorder"
+          ClipToBounds="True"
+          BorderBrush="#22FFFFFF"
+          BorderThickness="1"
+          Background="#141622">
+    <Grid>
+      <!-- Soft Ambient Spotlight Gradients (no harsh circles) -->
+      <Border x:Name="GlowTop" IsHitTestVisible="False" />
+      <Border x:Name="GlowBottom" IsHitTestVisible="False" />
+
+      <!-- Real Gateway Poster Cover Image -->
+      <Image x:Name="CoverImage"
+             Stretch="UniformToFill"
+             IsHitTestVisible="False"
+             IsVisible="False" />
+
+      <!-- Subtle Cinema Diagonal Gloss -->
+      <Border IsHitTestVisible="False" Opacity="0.16">
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#44FFFFFF" Offset="0" />
+            <GradientStop Color="#00FFFFFF" Offset="0.42" />
+            <GradientStop Color="#00000000" Offset="1" />
+          </LinearGradientBrush>
+        </Border.Background>
+      </Border>
+
+      <!-- Top Badges (Hidden automatically on small thumbnails < 90px wide) -->
+      <Grid x:Name="BadgeRow" RowDefinitions="Auto,*,Auto" Margin="9">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <Border Background="#90000000"
+                  BorderBrush="#26FFFFFF"
+                  BorderThickness="1"
+                  CornerRadius="6"
+                  Padding="6,2">
+            <TextBlock x:Name="CategoryText"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       FontWeight="Medium"
+                       Foreground="#F8FAFC" />
+          </Border>
+          <Border x:Name="EpisodeBadgeBorder"
+                  Grid.Column="2"
+                  Background="#7A000000"
+                  CornerRadius="6"
+                  Padding="6,2">
+            <TextBlock x:Name="EpisodeText"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       Foreground="#E2E8F0" />
+          </Border>
+        </Grid>
+
+        <!-- Center Editorial Film Watermark -->
+        <TextBlock x:Name="CenterWatermark"
+                   Grid.Row="1"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontSize="15"
+                   FontWeight="Bold"
+                   Foreground="#28FFFFFF"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   MaxLines="2"
+                   Margin="8,0" />
+
+        <Border x:Name="BottomScrim"
+                Grid.Row="2"
+                Margin="-9,0,-9,-9"
+                Padding="10,24,10,10">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+              <GradientStop Color="#00000000" Offset="0" />
+              <GradientStop Color="#E608090E" Offset="1" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <StackPanel Spacing="2">
+            <TextBlock x:Name="TagsTextBlock"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       Foreground="#CBD5E1"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="TitleTextBlock"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       FontWeight="Bold"
+                       Foreground="#FFFFFF"
+                       MaxLines="2"
+                       TextWrapping="Wrap"
+                       TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Border>
+</UserControl>

@@ -1,0 +1,108 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
+             xmlns:controls="using:MioReel.Desktop.Controls"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             x:Class="MioReel.Desktop.Views.DownloadsView"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,*" RowSpacing="16">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,12,0">
+      <StackPanel Spacing="3">
+        <TextBlock Text="离线下载" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+        <TextBlock Text="离线缓存队列 · 支持无网播放" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsActiveDlTab}"
+                Content="{Binding ActiveDlTabText}"
+                Command="{Binding SelectDownloadTabCommand}"
+                CommandParameter="active" />
+        <Button Classes="pill-btn"
+                Classes.active="{Binding IsDoneDlTab}"
+                Content="{Binding DoneDlTabText}"
+                Command="{Binding SelectDownloadTabCommand}"
+                CommandParameter="done" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1">
+      <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
+                         BorderThickness="1"
+                         CornerRadius="18"
+                         Padding="24,42"
+                         VerticalAlignment="Top"
+                         Margin="0,0,12,0"
+                         IsVisible="{Binding !HasVisibleDownloads}">
+        <TextBlock Text="{Binding EmptyDownloadsText}"
+                   HorizontalAlignment="Center"
+                   FontSize="{DynamicResource AppMinFontSize}"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+      </aviora:AvioraCard>
+
+      <ItemsControl Classes="virtual-list"
+                    ItemsSource="{Binding VisibleDownloads}"
+                    IsVisible="{Binding HasVisibleDownloads}"
+                    Padding="0,0,12,18">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:DownloadItemViewModel">
+          <aviora:AvioraCard Margin="0,0,0,10"
+                             Background="{DynamicResource SurfaceBrush}"
+                             BorderBrush="{DynamicResource BorderSubtleBrush}"
+                             BorderThickness="1"
+                             CornerRadius="16"
+                             Padding="14">
+            <Grid ColumnDefinitions="56,*" ColumnSpacing="14">
+              <Button Padding="0"
+                      BorderThickness="0"
+                      Background="Transparent"
+                      Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).OpenDramaCommand}"
+                      CommandParameter="{Binding Card}">
+                <aviora:Hero Tag="{Binding HeroTag}" CornerRadius="10" Width="54" Height="72">
+                  <controls:DramaCoverControl Drama="{Binding Card.Drama}" CornerRadius="10" ShowTextOverlay="False" />
+                </aviora:Hero>
+              </Button>
+
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                  <TextBlock Text="{Binding Title}" FontSize="{DynamicResource AppMinFontSize}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextPrimaryBrush}" />
+                  <TextBlock Grid.Column="1" Text="{Binding RightMetric}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+                </Grid>
+
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
+                             MinWidth="40" Height="5" CornerRadius="3"
+                             Foreground="{StaticResource BrandGradientBrush}"
+                             Background="{DynamicResource ProgressTrackBrush}" />
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                  <TextBlock Text="{Binding StatusDetail}" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                    <Button Background="Transparent" BorderThickness="0" Padding="4,0" FontSize="{DynamicResource AppMinFontSize}"
+                            Foreground="{DynamicResource AccentRoseBrush}"
+                            IsVisible="{Binding !IsCompleted}"
+                            Content="{Binding ToggleLabel}"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ToggleDownloadPauseCommand}"
+                            CommandParameter="{Binding TaskId}" />
+                    <Button Background="Transparent" BorderThickness="0" Padding="4,0" FontSize="{DynamicResource AppMinFontSize}"
+                            Foreground="{DynamicResource AccentRoseBrush}"
+                            IsVisible="{Binding IsCompleted}"
+                            Content="立即观看"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).OpenDramaCommand}"
+                            CommandParameter="{Binding Card}" />
+                    <Button Background="Transparent" BorderThickness="0" Padding="4,0" FontSize="{DynamicResource AppMinFontSize}"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            Content="移除"
+                            ToolTip.Tip="移除任务，保留已下载的本地文件"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveDownloadCommand}"
+                            CommandParameter="{Binding TaskId}" />
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Grid>
+          </aviora:AvioraCard>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    </Grid>
+  </Grid>
+</UserControl>
