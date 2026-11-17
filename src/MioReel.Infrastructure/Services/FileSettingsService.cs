@@ -88,8 +88,8 @@ public sealed class FileSettingsService : ISettingsService
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
             "MioReel",
             "Downloads"),
-        GatewayBaseUrl: "http://127.0.0.1:8080",
-        GatewayToken: string.Empty);
+        GatewayBaseUrl: "https://miaomiaotv.diaofanle.com",
+        GatewayToken: "248b4593caed441eb05ae0f124cf04cb");
 
     private static AppSettings Normalize(AppSettings value, AppSettings? fallback = null)
     {

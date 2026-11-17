@@ -70,7 +70,8 @@ public sealed class InMemorySettingsService : ISettingsService
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
             "MioReel",
             "Downloads"),
-        GatewayBaseUrl: Environment.GetEnvironmentVariable("MIOREEL_GATEWAY_URL") ?? "http://127.0.0.1:8080");
+        GatewayBaseUrl: Environment.GetEnvironmentVariable("MIOREEL_GATEWAY_URL") ?? "https://miaomiaotv.diaofanle.com",
+        GatewayToken: Environment.GetEnvironmentVariable("MIOREEL_GATEWAY_TOKEN") ?? "248b4593caed441eb05ae0f124cf04cb");
 
     public void Update(AppSettings settings) => Current = settings;
 }

@@ -140,7 +140,7 @@
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
             <TextBox AutomationProperties.Name="视频源服务地址"
                      Text="{Binding GatewayBaseUrl, Mode=TwoWay}"
-                     PlaceholderText="http://127.0.0.1:8080"
+                     PlaceholderText="https://miaomiaotv.diaofanle.com"
                      CornerRadius="10"
                      Height="36"
                      VerticalContentAlignment="Center" />

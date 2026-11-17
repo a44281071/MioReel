@@ -92,7 +92,11 @@
                            ShowDelay="0:0:0.1"
                            CloseDelay="0:0:0.2"
                            MinimumShowDuration="0:0:0.3">
-      <aviora:Dialog x:Name="DialogHost">
+      <aviora:Dialog x:Name="DialogHost"
+                     SurfaceBackground="Transparent"
+                     SurfaceBorderThickness="0"
+                     SurfacePadding="0"
+                     SurfaceCornerRadius="18">
         <aviora:Drawer x:Name="DrawerHost">
           <aviora:HeroHost x:Name="PlayerHeroHost"
                            Duration="0:0:0.34"
