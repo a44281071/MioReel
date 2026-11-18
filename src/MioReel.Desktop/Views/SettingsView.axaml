@@ -107,6 +107,102 @@
       </StackPanel>
     </aviora:AvioraCard>
 
+    <!-- Hotkeys & Global Boss Key -->
+    <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
+                       BorderBrush="{DynamicResource BorderSubtleBrush}"
+                       BorderThickness="1"
+                       CornerRadius="18"
+                       Padding="18">
+      <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="快捷键与全局热键" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="{Binding GlobalHotkeyStatusSummary}"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <Button Grid.Column="1"
+                  AutomationProperties.Name="恢复默认快捷键"
+                  Classes="surface-btn"
+                  VerticalAlignment="Center"
+                  Content="恢复默认"
+                  Command="{Binding ResetHotkeysCommand}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2">
+            <TextBlock Text="启用系统全局热键" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="开启后即使窗体已隐藏或切换到其他应用，也可响应系统全局热键" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <ToggleSwitch Grid.Column="1"
+                        AutomationProperties.Name="启用系统全局热键"
+                        IsChecked="{Binding GlobalHotkeysEnabled, Mode=TwoWay}"
+                        OnContent="开"
+                        OffContent="关" />
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <ItemsControl ItemsSource="{Binding HotkeyRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:HotkeyRowViewModel">
+              <Border BorderBrush="{DynamicResource BorderSubtleBrush}"
+                      BorderThickness="0,0,0,1"
+                      Padding="0,8">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Spacing="3" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Title}"
+                                 FontSize="{DynamicResource AppMinFontSize}"
+                                 FontWeight="Medium"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                      <Border Background="{DynamicResource AccentSoftBrush}"
+                              IsVisible="{Binding IsGlobal}"
+                              CornerRadius="999"
+                              Padding="7,1"
+                              VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ScopeBadge}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentRoseBrush}" />
+                      </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Description}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding StatusError}"
+                               IsVisible="{Binding HasStatusError}"
+                               FontSize="11"
+                               Foreground="{DynamicResource AccentRoseBrush}" />
+                  </StackPanel>
+
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Classes="pill-btn"
+                            Classes.active="{Binding IsRecording}"
+                            MinWidth="126"
+                            HorizontalContentAlignment="Center"
+                            Content="{Binding ButtonText}"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).BeginRecordHotkeyCommand}"
+                            CommandParameter="{Binding Action}" />
+                    <Button Classes="surface-btn"
+                            Padding="8,5"
+                            FontSize="11"
+                            Content="清除"
+                            IsVisible="{Binding CanClear}"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ClearHotkeyCommand}"
+                            CommandParameter="{Binding Action}" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </aviora:AvioraCard>
+
     <!-- Storage & Service -->
     <aviora:AvioraCard Background="{DynamicResource SurfaceBrush}"
                        BorderBrush="{DynamicResource BorderSubtleBrush}"

@@ -3,28 +3,18 @@
              xmlns:vm="using:MioReel.Desktop.ViewModels"
              x:Class="MioReel.Desktop.Controls.PlayerTransportBar"
              x:DataType="vm:PlayerViewModel">
-  <UserControl.Styles>
-    <Style Selector="Button.episode-nav">
-      <Setter Property="Width" Value="28" />
-      <Setter Property="Height" Value="28" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Foreground" Value="#F8FAFC" />
-      <Setter Property="Background" Value="#22FFFFFF" />
-      <Setter Property="BorderThickness" Value="0" />
-    </Style>
-  </UserControl.Styles>
   <Grid>
-    <Border CornerRadius="12"
-            BorderBrush="#2CFFFFFF"
+    <Border CornerRadius="14"
+            BorderBrush="#24FFFFFF"
             BorderThickness="1">
       <Border.Background>
         <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-          <GradientStop Color="#E6141622" Offset="0" />
-          <GradientStop Color="#EA0B0C13" Offset="1" />
+          <GradientStop Color="#E8151724" Offset="0" />
+          <GradientStop Color="#EE0B0C14" Offset="1" />
         </LinearGradientBrush>
       </Border.Background>
     </Border>
-    <StackPanel Margin="12,8" Spacing="6">
+    <StackPanel Margin="10,8" Spacing="6">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
         <TextBlock Text="{Binding CurrentTimeText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="#E2E8F0" VerticalAlignment="Center" />
         <Slider Grid.Column="1"
@@ -37,75 +27,67 @@
       </Grid>
 
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Orientation="Horizontal" Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="5">
           <Button AutomationProperties.Name="上一集"
                   ToolTip.Tip="上一集（Page Up）"
-                  Classes="surface-btn episode-nav"
+                  Classes="player-hud-btn"
+                  Width="28" Height="28"
                   IsEnabled="{Binding HasPreviousEpisode}"
                   Command="{Binding PreviousEpisodeCommand}">
-            <PathIcon Data="M6 4H8V20H6ZM18 4V20L8 12Z" Width="14" Height="14" />
+            <PathIcon Data="{StaticResource IconPrevEpisode}" Width="14" Height="14" />
           </Button>
           <Button x:Name="PlayerPlayPauseBtn"
                   AutomationProperties.Name="播放或暂停"
                   Classes="brand-cta"
-                  Width="30"
+                  Width="32"
                   Height="28"
                   Padding="0"
-                  CornerRadius="8"
+                  CornerRadius="9"
                   Command="{Binding TogglePlayPauseCommand}">
             <Grid>
-              <PathIcon Data="{StaticResource IconPause}" Width="12" Height="12" Foreground="#FFFFFF" IsVisible="{Binding IsPlaying}" />
-              <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="#FFFFFF" IsVisible="{Binding !IsPlaying}" />
+              <PathIcon Data="{StaticResource IconPause}" Width="13" Height="13" Foreground="#FFFFFF" IsVisible="{Binding IsPlaying}" />
+              <PathIcon Data="{StaticResource IconPlay}" Width="13" Height="13" Foreground="#FFFFFF" IsVisible="{Binding !IsPlaying}" />
             </Grid>
           </Button>
-          <Button Classes="surface-btn episode-nav"
+          <Button Classes="player-hud-btn"
                   AutomationProperties.Name="下一集"
                   ToolTip.Tip="下一集（Page Down）"
+                  Width="28" Height="28"
                   IsEnabled="{Binding HasNextEpisode}"
                   Command="{Binding NextEpisodeCommand}">
-            <PathIcon Data="M16 4H18V20H16ZM6 4L16 12L6 20Z" Width="14" Height="14" />
+            <PathIcon Data="{StaticResource IconNextEpisode}" Width="14" Height="14" />
           </Button>
         </StackPanel>
 
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5">
           <Button x:Name="RenderModeBtn"
                   AutomationProperties.Name="切换渲染方式"
-                  Classes="surface-btn"
+                  Classes="player-hud-btn"
                   ToolTip.Tip="{Binding RenderModeLabel}"
-                  Width="28" Height="28" Padding="0"
-                  FontSize="{DynamicResource AppMinFontSize}"
-                  Foreground="#F8FAFC"
-                  Background="#22FFFFFF"
-                  BorderThickness="0"
+                  Width="28" Height="28"
                   Command="{Binding ToggleMenuCommand}"
                   CommandParameter="render">
-            <PathIcon Data="M3 4H21V17H13V20H17V22H7V20H11V17H3ZM5 6V15H19V6Z" Width="14" Height="14" />
+            <PathIcon Data="{StaticResource IconRenderMode}" Width="15" Height="15" />
           </Button>
           <Button x:Name="SpeedSelectBtn"
                   AutomationProperties.Name="选择倍速"
-                  Classes="surface-btn"
+                  Classes="player-hud-btn"
                   ToolTip.Tip="选择倍速"
-                  Padding="6,0" Height="28"
+                  Padding="8,0" Height="28"
                   HorizontalContentAlignment="Center"
                   VerticalContentAlignment="Center"
-                  FontSize="{DynamicResource AppMinFontSize}"
-                  Foreground="#F8FAFC"
-                  Background="#22FFFFFF"
-                  BorderThickness="0"
+                  FontWeight="SemiBold"
                   Content="{Binding SpeedLabel}"
                   Command="{Binding ToggleMenuCommand}"
                   CommandParameter="speed" />
           <Button x:Name="QualitySelectBtn"
                   AutomationProperties.Name="选择清晰度"
-                  Classes="surface-btn"
+                  Classes="player-hud-btn"
                   ToolTip.Tip="{Binding QualityPreferenceText}"
-                  Padding="6,0" Height="28"
+                  Padding="8,0" Height="28"
                   HorizontalContentAlignment="Center"
                   VerticalContentAlignment="Center"
-                  FontSize="{DynamicResource AppMinFontSize}"
-                  Foreground="#F8FAFC"
-                  Background="#22FFFFFF"
-                  BorderThickness="0"
+                  FontWeight="SemiBold"
                   Content="{Binding QualityLabel}"
                   Command="{Binding ToggleMenuCommand}"
                   CommandParameter="quality" />

@@ -18,6 +18,7 @@ public sealed class MainWindowViewModel : ReactiveObject
     private readonly IDialogService _dialogs;
     private readonly ILoadingService _loading;
     private readonly IToastService _toast;
+    private readonly IGlobalHotkeyService _globalHotkeys;
 
     private CancellationTokenSource? _searchDebounceCts;
     private CancellationTokenSource? _catalogCts;
@@ -53,6 +54,8 @@ public sealed class MainWindowViewModel : ReactiveObject
     private bool _pendingHistoryRefresh;
     private bool _isSearching;
     private string? _searchErrorMessage;
+    private HotkeySettings _hotkeys = HotkeySettings.CreateDefaults();
+    private HotkeyAction? _activeRecordingAction;
 
     public MainWindowViewModel(
         IDramaCatalogService catalog,
@@ -62,6 +65,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         IDialogService dialogs,
         ILoadingService loading,
         IToastService toast,
+        IGlobalHotkeyService globalHotkeys,
         PlayerViewModel player)
     {
         _catalog = catalog;
@@ -71,6 +75,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         _dialogs = dialogs;
         _loading = loading;
         _toast = toast;
+        _globalHotkeys = globalHotkeys;
         Player = player;
         Player.HistoryUpdated += OnPlayerHistoryUpdated;
         Player.ClosingRequested += OnPlayerClosingRequested;
@@ -83,14 +88,16 @@ public sealed class MainWindowViewModel : ReactiveObject
         _downloadDirectory = s.DownloadDirectory;
         _gatewayBaseUrl = s.GatewayBaseUrl;
         _gatewayToken = s.GatewayToken;
+        _hotkeys = (s.Hotkeys ?? HotkeySettings.CreateDefaults()).EnsurePopulated();
+        BuildHotkeyRows();
 
         RecentSearches = [];
         NavItems =
         [
-            new(NavSection.Explore, "片库", "片库", "M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z"),
-            new(NavSection.Search, "搜索", "搜索", "M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z"),
-            new(NavSection.History, "浏览历史", "历史", "M13 3C8.03 3 4 7.03 4 12H1L4.89 15.89L4.96 16.03L9 12H6C6 8.13 9.13 5 13 5C16.87 5 20 8.13 20 12C20 15.87 16.87 19 13 19C11.07 19 9.32 18.21 8.06 16.94L6.64 18.36C8.27 19.99 10.51 21 13 21C17.97 21 22 16.97 22 12C22 7.03 17.97 3 13 3ZM12 8V13L16.28 15.54L17 14.33L13.5 12.25V8H12Z"),
-            new(NavSection.Downloads, "离线下载", "下载", "M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"),
+            new(NavSection.Explore, "片库", "片库", "M10.75 3.45L3.75 9.1C3.28 9.48 3 10.05 3 10.66V18.8C3 19.9 3.9 20.8 5 20.8H8.6C9.15 20.8 9.6 20.35 9.6 19.8V15.4C9.6 14.52 10.32 13.8 11.2 13.8H12.8C13.68 13.8 14.4 14.52 14.4 15.4V19.8C14.4 20.35 14.85 20.8 15.4 20.8H19C20.1 20.8 21 19.9 21 18.8V10.66C21 10.05 20.72 9.48 20.25 9.1L13.25 3.45C12.52 2.86 11.48 2.86 10.75 3.45Z"),
+            new(NavSection.Search, "搜索", "搜索", "M10.5 3.7C6.74 3.7 3.7 6.74 3.7 10.5C3.7 14.26 6.74 17.3 10.5 17.3C12.1 17.3 13.57 16.75 14.74 15.83L18.59 19.68C18.98 20.07 19.61 20.07 20 19.68C20.39 19.29 20.39 18.66 20 18.27L16.15 14.42C16.87 13.3 17.3 11.95 17.3 10.5C17.3 6.74 14.26 3.7 10.5 3.7ZM10.5 5.6C13.21 5.6 15.4 7.79 15.4 10.5C15.4 13.21 13.21 15.4 10.5 15.4C7.79 15.4 5.6 13.21 5.6 10.5C5.6 7.79 7.79 5.6 10.5 5.6Z"),
+            new(NavSection.History, "浏览历史", "历史", "M12.5 3.2C8.05 3.2 4.38 6.53 3.84 10.83L2.75 9.74C2.36 9.35 1.73 9.35 1.34 9.74C0.95 10.13 0.95 10.76 1.34 11.15L4.04 13.85C4.43 14.24 5.06 14.24 5.45 13.85L8.15 11.15C8.54 10.76 8.54 10.13 8.15 9.74C7.76 9.35 7.13 9.35 6.74 9.74L5.83 10.65C6.45 7.54 9.2 5.2 12.5 5.2C16.26 5.2 19.3 8.24 19.3 12C19.3 15.76 16.26 18.8 12.5 18.8C10.81 18.8 9.27 18.18 8.08 17.16C7.66 16.8 7.03 16.85 6.67 17.27C6.31 17.69 6.36 18.32 6.78 18.68C8.32 20 10.32 20.8 12.5 20.8C17.36 20.8 21.3 16.86 21.3 12C21.3 7.14 17.36 3.2 12.5 3.2ZM12.5 7.8C11.95 7.8 11.5 8.25 11.5 8.8V12.4C11.5 12.76 11.69 13.09 12 13.27L14.8 14.87C15.28 15.14 15.89 14.97 16.16 14.49C16.43 14.01 16.26 13.4 15.78 13.13L13.5 11.82V8.8C13.5 8.25 13.05 7.8 12.5 7.8Z"),
+            new(NavSection.Downloads, "离线下载", "下载", "M12 3.2C11.45 3.2 11 3.65 11 4.2V12.6L8.5 10.1C8.11 9.71 7.48 9.71 7.09 10.1C6.7 10.49 6.7 11.12 7.09 11.51L11.29 15.71C11.68 16.1 12.32 16.1 12.71 15.71L16.91 11.51C17.3 11.12 17.3 10.49 16.91 10.1C16.52 9.71 15.89 9.71 15.5 10.1L13 12.6V4.2C13 3.65 12.55 3.2 12 3.2ZM4.2 14.8C3.65 14.8 3.2 15.25 3.2 15.8V17.6C3.2 19.37 4.63 20.8 6.4 20.8H17.6C19.37 20.8 20.8 19.37 20.8 17.6V15.8C20.8 15.25 20.35 14.8 19.8 14.8C19.25 14.8 18.8 15.25 18.8 15.8V17.6C18.8 18.26 18.26 18.8 17.6 18.8H6.4C5.74 18.8 5.2 18.26 5.2 17.6V15.8C5.2 15.25 4.75 14.8 4.2 14.8Z"),
             new(NavSection.Settings, "设置", "设置", "M19.14 12.94C19.18 12.64 19.2 12.33 19.2 12C19.2 11.68 19.18 11.36 19.13 11.06L21.16 9.48C21.34 9.34 21.39 9.07 21.28 8.87L19.36 5.55C19.24 5.33 18.99 5.26 18.77 5.33L16.38 6.29C15.88 5.91 15.35 5.59 14.76 5.35L14.4 2.81C14.36 2.57 14.16 2.4 13.92 2.4H10.08C9.84 2.4 9.65 2.57 9.61 2.81L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33C5.02 5.25 4.77 5.33 4.65 5.55L2.74 8.87C2.62 9.08 2.66 9.34 2.86 9.48L4.89 11.06C4.84 11.36 4.8 11.69 4.8 12C4.8 12.31 4.82 12.64 4.87 12.94L2.84 14.52C2.66 14.66 2.61 14.93 2.72 15.13L4.64 18.45C4.76 18.67 5.01 18.74 5.23 18.67L7.62 17.71C8.12 18.09 8.65 18.41 9.24 18.65L9.6 21.19C9.65 21.43 9.84 21.6 10.08 21.6H13.92C14.16 21.6 14.36 21.43 14.39 21.19L14.75 18.65C15.34 18.41 15.88 18.09 16.37 17.71L18.76 18.67C18.98 18.75 19.23 18.67 19.35 18.45L21.27 15.13C21.39 14.91 21.34 14.66 21.15 14.52L19.14 12.94ZM12 15.6C10.02 15.6 8.4 13.98 8.4 12C8.4 10.02 10.02 8.4 12 8.4C13.98 8.4 15.6 10.02 15.6 12C15.6 13.98 13.98 15.6 12 15.6Z")
         ];
         _selectedNavItem = NavItems[0];
@@ -151,6 +158,12 @@ public sealed class MainWindowViewModel : ReactiveObject
         LoadMoreCatalogCommand = ReactiveCommand.CreateFromTask(LoadMoreCatalogAsync);
         OpenSettingsCommand = ReactiveCommand.Create(() => { CurrentSection = NavSection.Settings; });
         ClearTempCacheCommand = ReactiveCommand.Create(() => { _toast.ShowSuccess("已清理临时缓存"); });
+        BeginRecordHotkeyCommand = ReactiveCommand.Create<HotkeyAction>(BeginRecordHotkey);
+        ClearHotkeyCommand = ReactiveCommand.Create<HotkeyAction>(ClearHotkey);
+        ResetHotkeysCommand = ReactiveCommand.Create(ResetHotkeys);
+
+        _globalHotkeys.StatusChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(RefreshHotkeyStatuses);
+        _globalHotkeys.ApplyBindings(_hotkeys.GlobalHotkeysEnabled, _hotkeys.GetGlobalBindings());
 
         Player.WhenAnyValue(x => x.IsOpen)
             .Subscribe(isOpen =>
@@ -186,6 +199,7 @@ public sealed class MainWindowViewModel : ReactiveObject
     public ObservableCollection<HistoryItemViewModel> EarlierHistory { get; } = [];
     public ObservableCollection<HistoryRowEntry> HistoryRows { get; } = [];
     public ObservableCollection<DownloadItemViewModel> VisibleDownloads { get; } = [];
+    public ObservableCollection<HotkeyRowViewModel> HotkeyRows { get; } = [];
 
     public ReactiveCommand<NavSection, RxVoid> NavigateCommand { get; }
     public ReactiveCommand<DramaCategory, RxVoid> SelectCategoryCommand { get; }
@@ -208,6 +222,46 @@ public sealed class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<RxVoid, RxVoid> LoadMoreCatalogCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> OpenSettingsCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> ClearTempCacheCommand { get; }
+    public ReactiveCommand<HotkeyAction, RxVoid> BeginRecordHotkeyCommand { get; }
+    public ReactiveCommand<HotkeyAction, RxVoid> ClearHotkeyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ResetHotkeysCommand { get; }
+
+    public HotkeySettings Hotkeys => _hotkeys;
+    public HotkeyAction? ActiveRecordingAction => _activeRecordingAction;
+
+    public bool GlobalHotkeysEnabled
+    {
+        get => _hotkeys.GlobalHotkeysEnabled;
+        set
+        {
+            if (_hotkeys.GlobalHotkeysEnabled == value) return;
+            _hotkeys = _hotkeys with { GlobalHotkeysEnabled = value };
+            this.RaisePropertyChanged();
+            SaveSettings();
+            _globalHotkeys.ApplyBindings(_hotkeys.GlobalHotkeysEnabled, _hotkeys.GetGlobalBindings());
+            RefreshHotkeyStatuses();
+        }
+    }
+
+    public string GlobalHotkeyStatusSummary
+    {
+        get
+        {
+            if (!_globalHotkeys.IsSupported)
+                return _globalHotkeys.PlatformNotice ?? "当前平台不支持系统全局热键";
+            if (!GlobalHotkeysEnabled)
+                return $"全局热键已关闭（引擎：{_globalHotkeys.BackendName}）";
+
+            var registeredCount = _globalHotkeys.Statuses.Values.Count(s => s.IsRegistered);
+            var errorCount = _globalHotkeys.Statuses.Values.Count(s => !string.IsNullOrWhiteSpace(s.ErrorMessage));
+            var baseText = $"引擎：{_globalHotkeys.BackendName} · 已注册 {registeredCount} 项";
+            if (errorCount > 0)
+                baseText += $"（{errorCount} 项存在冲突或不支持）";
+            if (!string.IsNullOrWhiteSpace(_globalHotkeys.PlatformNotice))
+                baseText += $" · {_globalHotkeys.PlatformNotice}";
+            return baseText;
+        }
+    }
 
     public NavSection CurrentSection
     {
@@ -215,6 +269,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         set
         {
             if (_currentSection == value) return;
+            CancelRecordingHotkey();
             this.RaiseAndSetIfChanged(ref _currentSection, value);
             var matched = NavItems.FirstOrDefault(x => x.Section == value);
             if (matched is not null && !ReferenceEquals(_selectedNavItem, matched))
@@ -1097,7 +1152,117 @@ public sealed class MainWindowViewModel : ReactiveObject
             AutoPlayNextEpisode = AutoPlayNext,
             DownloadDirectory = DownloadDirectory,
             GatewayBaseUrl = GatewayBaseUrl,
-            GatewayToken = GatewayToken
+            GatewayToken = GatewayToken,
+            Hotkeys = _hotkeys
         });
+    }
+
+    private void BuildHotkeyRows()
+    {
+        HotkeyRows.Clear();
+        HotkeyRows.Add(new(HotkeyAction.GlobalBossKey, "暂停并隐藏 / 显示窗体", "在系统任意位置按下即可暂停当前播放并隐藏窗口，再次按下恢复显示", true, _hotkeys.GetBinding(HotkeyAction.GlobalBossKey)));
+        HotkeyRows.Add(new(HotkeyAction.GlobalPlayPause, "全局播放 / 暂停", "即使窗口在后台未聚焦也能随时控制播放或暂停（建议搭配修饰键）", true, _hotkeys.GetBinding(HotkeyAction.GlobalPlayPause)));
+        HotkeyRows.Add(new(HotkeyAction.PlayPause, "播放 / 暂停", "窗口聚焦且未在输入框打字时切换播放状态", false, _hotkeys.GetBinding(HotkeyAction.PlayPause)));
+        HotkeyRows.Add(new(HotkeyAction.SeekBackward, "快退 5 秒", "视频向后跳转 5 秒", false, _hotkeys.GetBinding(HotkeyAction.SeekBackward)));
+        HotkeyRows.Add(new(HotkeyAction.SeekForward, "快进 5 秒", "视频向前跳转 5 秒", false, _hotkeys.GetBinding(HotkeyAction.SeekForward)));
+        HotkeyRows.Add(new(HotkeyAction.SpeedUp, "提高倍速", "按倍速档位递增（最高 3.0x）", false, _hotkeys.GetBinding(HotkeyAction.SpeedUp)));
+        HotkeyRows.Add(new(HotkeyAction.SpeedDown, "降低倍速", "按倍速档位递减（最低 0.75x）", false, _hotkeys.GetBinding(HotkeyAction.SpeedDown)));
+        HotkeyRows.Add(new(HotkeyAction.SpeedReset, "恢复正常倍速", "一键将播放倍速重置为 1.0x", false, _hotkeys.GetBinding(HotkeyAction.SpeedReset)));
+        HotkeyRows.Add(new(HotkeyAction.PreviousEpisode, "上一集", "切换到当前短剧上一集", false, _hotkeys.GetBinding(HotkeyAction.PreviousEpisode)));
+        HotkeyRows.Add(new(HotkeyAction.NextEpisode, "下一集", "切换到当前短剧下一集", false, _hotkeys.GetBinding(HotkeyAction.NextEpisode)));
+        HotkeyRows.Add(new(HotkeyAction.ToggleMiniMode, "切换迷你窗口", "在常规大窗与迷你悬浮小窗之间切换", false, _hotkeys.GetBinding(HotkeyAction.ToggleMiniMode)));
+        HotkeyRows.Add(new(HotkeyAction.RestoreWindow, "还原窗体", "退出迷你小窗并恢复标准窗口尺寸", false, _hotkeys.GetBinding(HotkeyAction.RestoreWindow)));
+        RefreshHotkeyStatuses();
+    }
+
+    private void RefreshHotkeyStatuses()
+    {
+        var statuses = _globalHotkeys.Statuses;
+        foreach (var row in HotkeyRows)
+        {
+            if (row.IsGlobal && GlobalHotkeysEnabled && statuses.TryGetValue(row.Action, out var status))
+                row.StatusError = status.ErrorMessage;
+            else
+                row.StatusError = null;
+        }
+        this.RaisePropertyChanged(nameof(GlobalHotkeyStatusSummary));
+    }
+
+    private void BeginRecordHotkey(HotkeyAction action)
+    {
+        foreach (var row in HotkeyRows)
+            row.IsRecording = row.Action == action;
+        _activeRecordingAction = action;
+        this.RaisePropertyChanged(nameof(ActiveRecordingAction));
+    }
+
+    public void CancelRecordingHotkey()
+    {
+        if (_activeRecordingAction is null) return;
+        _activeRecordingAction = null;
+        foreach (var row in HotkeyRows)
+            row.IsRecording = false;
+        this.RaisePropertyChanged(nameof(ActiveRecordingAction));
+    }
+
+    public bool TryCommitRecordedHotkey(HotkeyBinding candidate)
+    {
+        if (_activeRecordingAction is not { } action)
+            return false;
+
+        if (HotkeySettings.IsGlobalAction(action) && !candidate.HasAnyModifier)
+        {
+            _toast.ShowError("全局热键需至少包含 Ctrl / Alt / Shift 修饰键，以免干扰日常输入");
+            return false;
+        }
+
+        if (_hotkeys.FindConflict(action, candidate) is { } conflictAction)
+        {
+            var conflictTitle = HotkeyRows.FirstOrDefault(r => r.Action == conflictAction)?.Title ?? conflictAction.ToString();
+            _toast.ShowError($"快捷键 {candidate.DisplayText} 已被「{conflictTitle}」使用");
+            return false;
+        }
+
+        _hotkeys = _hotkeys.WithBinding(action, candidate);
+        var row = HotkeyRows.FirstOrDefault(r => r.Action == action);
+        if (row is not null)
+            row.Binding = _hotkeys.GetBinding(action);
+
+        CancelRecordingHotkey();
+        SaveSettings();
+
+        if (HotkeySettings.IsGlobalAction(action))
+            _globalHotkeys.ApplyBindings(_hotkeys.GlobalHotkeysEnabled, _hotkeys.GetGlobalBindings());
+
+        return true;
+    }
+
+    private void ClearHotkey(HotkeyAction action)
+    {
+        if (_activeRecordingAction == action)
+            CancelRecordingHotkey();
+
+        _hotkeys = _hotkeys.WithBinding(action, HotkeyBinding.Empty);
+        var row = HotkeyRows.FirstOrDefault(r => r.Action == action);
+        if (row is not null)
+            row.Binding = HotkeyBinding.Empty;
+
+        SaveSettings();
+        if (HotkeySettings.IsGlobalAction(action))
+            _globalHotkeys.ApplyBindings(_hotkeys.GlobalHotkeysEnabled, _hotkeys.GetGlobalBindings());
+    }
+
+    private void ResetHotkeys()
+    {
+        CancelRecordingHotkey();
+        _hotkeys = HotkeySettings.CreateDefaults();
+        foreach (var row in HotkeyRows)
+            row.Binding = _hotkeys.GetBinding(row.Action);
+
+        this.RaisePropertyChanged(nameof(GlobalHotkeysEnabled));
+        SaveSettings();
+        _globalHotkeys.ApplyBindings(_hotkeys.GlobalHotkeysEnabled, _hotkeys.GetGlobalBindings());
+        RefreshHotkeyStatuses();
+        _toast.ShowSuccess("快捷键已恢复默认设置");
     }
 }

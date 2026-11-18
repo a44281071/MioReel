@@ -69,7 +69,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private VideoRenderMode _renderMode = VideoRenderMode.Auto;
     private bool _isMiniMode;
     private bool _isMiniPinned = true;
-    private bool _areMiniControlsVisible = true;
+    private bool _areControlsVisible = true;
     private double _positionSeconds;
     private double _durationSeconds;
     private bool _hasRealMediaUrl;
@@ -247,23 +247,23 @@ public sealed class PlayerViewModel : ReactiveObject
         {
             if (_isMiniMode == value) return;
             this.RaiseAndSetIfChanged(ref _isMiniMode, value);
-            RaiseMiniVisibilityProperties();
+            RaiseControlVisibilityProperties();
         }
     }
 
-    public bool AreMiniControlsVisible
+    public bool AreControlsVisible
     {
-        get => _areMiniControlsVisible;
+        get => _areControlsVisible;
         private set
         {
-            if (_areMiniControlsVisible == value) return;
-            this.RaiseAndSetIfChanged(ref _areMiniControlsVisible, value);
-            RaiseMiniVisibilityProperties();
+            if (_areControlsVisible == value) return;
+            this.RaiseAndSetIfChanged(ref _areControlsVisible, value);
+            RaiseControlVisibilityProperties();
         }
     }
 
-    public bool ShowMiniTopBar => IsMiniMode && AreMiniControlsVisible;
-    public bool ShowTransportControls => !IsMiniMode || AreMiniControlsVisible;
+    public bool ShowMiniTopBar => IsMiniMode && AreControlsVisible;
+    public bool ShowTransportControls => AreControlsVisible;
 
     public bool IsEffectiveNativeSurface
     {
@@ -284,7 +284,7 @@ public sealed class PlayerViewModel : ReactiveObject
     public bool UseFloatingMenu => !IsNativeSurfaceMode && IsAnyMenuOpen;
     public bool UseDockedMenu => IsNativeSurfaceMode && IsAnyMenuOpen;
 
-    private void RaiseMiniVisibilityProperties()
+    private void RaiseControlVisibilityProperties()
     {
         this.RaisePropertyChanged(nameof(ShowMiniTopBar));
         this.RaisePropertyChanged(nameof(ShowTransportControls));
@@ -404,6 +404,7 @@ public sealed class PlayerViewModel : ReactiveObject
         HasRealMediaUrl = false;
         ResolvedPlayUrl = null;
         StreamErrorMessage = null;
+        AreControlsVisible = true;
         IsPlaying = true;
         IsOpen = true;
         HistoryUpdated?.Invoke();
@@ -467,9 +468,9 @@ public sealed class PlayerViewModel : ReactiveObject
         ResolvedPlayUrl = null;
         ReleaseActiveProxySession();
         ReleaseRetiredProxySessions();
+        AreControlsVisible = true;
         if (wasMini)
         {
-            AreMiniControlsVisible = true;
             IsMiniMode = false;
             MiniModeChanged?.Invoke(false, StreamWidth > StreamHeight);
         }
@@ -704,7 +705,40 @@ public sealed class PlayerViewModel : ReactiveObject
     private void SelectSpeed(PlayerMenuOptionViewModel? option)
     {
         if (option is null) return;
-        _playbackRate = option.DoubleValue;
+        ApplySpeedRate(option.DoubleValue);
+    }
+
+    public void StepSpeed(int delta)
+    {
+        if (delta == 0) return;
+        var currentIndex = 0;
+        var bestDiff = double.MaxValue;
+        for (var i = 0; i < SpeedPresets.Length; i++)
+        {
+            var diff = Math.Abs(SpeedPresets[i].Rate - _playbackRate);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                currentIndex = i;
+            }
+        }
+
+        // SpeedPresets is sorted descending (3.0x at 0 -> 0.75x at end)
+        var targetIndex = Math.Clamp(currentIndex - Math.Sign(delta), 0, SpeedPresets.Length - 1);
+        ApplySpeedRate(SpeedPresets[targetIndex].Rate);
+    }
+
+    public void ResetSpeed() => ApplySpeedRate(1.0);
+
+    public void SeekBy(double deltaSeconds)
+    {
+        if (!HasRealMediaUrl) return;
+        PositionSeconds = Math.Clamp(PositionSeconds + deltaSeconds, 0, Math.Max(0, DurationSeconds));
+    }
+
+    private void ApplySpeedRate(double rate)
+    {
+        _playbackRate = rate;
         _settings.Update(_settings.Current with { PlaybackRate = _playbackRate });
         foreach (var item in SpeedOptions)
             item.IsSelected = Math.Abs(item.DoubleValue - _playbackRate) < 0.01;
@@ -794,13 +828,13 @@ public sealed class PlayerViewModel : ReactiveObject
         RenderModeChanged?.Invoke(mode);
     }
 
-    public void SetMiniControlsVisible(bool visible)
+    public void SetControlsVisible(bool visible)
     {
         if (!visible) CloseMenu();
-        AreMiniControlsVisible = visible;
+        AreControlsVisible = visible;
     }
 
-    public void ToggleMiniControls() => SetMiniControlsVisible(!AreMiniControlsVisible);
+    public void ToggleControlsVisibility() => SetControlsVisible(!AreControlsVisible);
 
     public double? ConsumePendingResumeSeconds()
     {
@@ -997,7 +1031,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private void ToggleMiniMode()
     {
         CloseMenu();
-        AreMiniControlsVisible = true;
+        AreControlsVisible = true;
         IsMiniMode = !IsMiniMode;
         MiniModeChanged?.Invoke(IsMiniMode, StreamWidth > StreamHeight);
     }

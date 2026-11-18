@@ -45,3 +45,19 @@ public interface IMediaStreamProxyService : IDisposable
     Task<Uri> PreparePlayableUriAsync(ResolvedStreamInfo stream, CancellationToken ct = default);
     void ReleaseSession(Uri? proxyUri);
 }
+
+/// <summary>
+/// 跨平台系统全局热键监听服务（Windows RegisterHotKey / Linux X11 XGrabKey）。
+/// </summary>
+public interface IGlobalHotkeyService : IDisposable
+{
+    bool IsSupported { get; }
+    string BackendName { get; }
+    string? PlatformNotice { get; }
+    IReadOnlyDictionary<HotkeyAction, HotkeyRegistrationStatus> Statuses { get; }
+
+    event Action<HotkeyAction>? HotkeyTriggered;
+    event Action? StatusChanged;
+
+    void ApplyBindings(bool enabled, IReadOnlyDictionary<HotkeyAction, HotkeyBinding> bindings);
+}

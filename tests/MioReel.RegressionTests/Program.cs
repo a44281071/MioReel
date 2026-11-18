@@ -114,6 +114,18 @@ try
     var skipped = proxy.Prepared[1];
     await player.SelectEpisodeCommand.Execute(player.Episodes.Single(x => x.No == 3)).ToTask();
     Check(proxy.Released.Contains(skipped) && player.CurrentEpisodeNo == 3, "跳集时丢弃不匹配的下一集缓存");
+
+    Check(player.ShowTransportControls && !player.ShowMiniTopBar, "正常窗口打开后默认显示播放功能栏");
+    await player.ToggleMenuCommand.Execute("speed").ToTask();
+    Check(player.IsAnyMenuOpen && player.UseFloatingMenu, "正常窗口打开倍速菜单");
+    player.SetControlsVisible(false);
+    Check(!player.AreControlsVisible && !player.ShowTransportControls && !player.UseFloatingHud && !player.IsAnyMenuOpen, "正常窗口隐藏功能栏时同步收起悬浮条与菜单");
+    player.SetControlsVisible(true);
+    Check(player.AreControlsVisible && player.ShowTransportControls && player.UseFloatingHud, "正常窗口重新显示功能栏");
+    await player.ToggleMiniModeCommand.Execute().ToTask();
+    Check(player.IsMiniMode && player.ShowMiniTopBar && player.ShowTransportControls, "切换小窗后默认显示顶栏与控制栏");
+    player.ToggleControlsVisibility();
+    Check(!player.ShowMiniTopBar && !player.ShowTransportControls, "小窗允许切换隐藏全部功能栏");
     player.Close();
 
     catalog = new FakeCatalog { DelayEpisode = 2 };
@@ -127,6 +139,7 @@ try
 
     await CatalogRegressionTests.RunAsync();
     await DownloadRegressionTests.RunAsync(root);
+    HotkeyRegressionTests.Run(root);
 
     await using var upstream = new RangeServer();
     using var mediaProxy = new LocalMediaProxyService();

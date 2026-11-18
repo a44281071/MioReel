@@ -355,4 +355,56 @@
   <Style Selector="Button.player-menu-item.selected /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
   </Style>
+
+  <!-- Player HUD Glass Buttons -->
+  <Style Selector="Button.player-hud-btn">
+    <Setter Property="Background" Value="#1EFFFFFF" />
+    <Setter Property="Foreground" Value="#E2E8F0" />
+    <Setter Property="BorderBrush" Value="#18FFFFFF" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FontSize" Value="{DynamicResource AppMinFontSize}" />
+  </Style>
+  <Style Selector="Button.player-hud-btn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#36FFFFFF" />
+    <Setter Property="BorderBrush" Value="#3CFFFFFF" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.player-hud-btn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#4CFFFFFF" />
+    <Setter Property="BorderBrush" Value="#50FFFFFF" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.player-hud-btn:disabled">
+    <Setter Property="Opacity" Value="0.36" />
+  </Style>
+  <Style Selector="Button.player-hud-btn.active">
+    <Setter Property="Background" Value="#34FB7185" />
+    <Setter Property="BorderBrush" Value="#66FB7185" />
+    <Setter Property="Foreground" Value="#FDA4AF" />
+  </Style>
+  <Style Selector="Button.player-hud-btn.active:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#4DFB7185" />
+    <Setter Property="BorderBrush" Value="#88FB7185" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.player-hud-close">
+    <Setter Property="Background" Value="#1EFFFFFF" />
+    <Setter Property="Foreground" Value="#CBD5E1" />
+    <Setter Property="BorderBrush" Value="#18FFFFFF" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="Button.player-hud-close:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#E11D48" />
+    <Setter Property="BorderBrush" Value="#FB7185" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Button.player-hud-close:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#BE123C" />
+    <Setter Property="BorderBrush" Value="#E11D48" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
 </Styles>

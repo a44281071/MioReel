@@ -208,3 +208,71 @@ public sealed class PlayerMenuOptionViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _isSelected, value);
     }
 }
+
+public sealed class HotkeyRowViewModel : ReactiveObject
+{
+    private HotkeyBinding _binding;
+    private bool _isRecording;
+    private string? _statusError;
+
+    public HotkeyRowViewModel(
+        HotkeyAction action,
+        string title,
+        string description,
+        bool isGlobal,
+        HotkeyBinding binding)
+    {
+        Action = action;
+        Title = title;
+        Description = description;
+        IsGlobal = isGlobal;
+        _binding = binding;
+    }
+
+    public HotkeyAction Action { get; }
+    public string Title { get; }
+    public string Description { get; }
+    public bool IsGlobal { get; }
+    public string ScopeBadge => IsGlobal ? "全局" : "窗口";
+
+    public HotkeyBinding Binding
+    {
+        get => _binding;
+        set
+        {
+            if (Equals(_binding, value)) return;
+            _binding = value;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(ButtonText));
+            this.RaisePropertyChanged(nameof(CanClear));
+        }
+    }
+
+    public bool IsRecording
+    {
+        get => _isRecording;
+        set
+        {
+            if (_isRecording == value) return;
+            _isRecording = value;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(ButtonText));
+        }
+    }
+
+    public string? StatusError
+    {
+        get => _statusError;
+        set
+        {
+            if (_statusError == value) return;
+            _statusError = value;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(HasStatusError));
+        }
+    }
+
+    public bool HasStatusError => !string.IsNullOrWhiteSpace(StatusError);
+    public bool CanClear => !Binding.IsEmpty;
+    public string ButtonText => IsRecording ? "按下新快捷键 (Esc取消)" : Binding.DisplayText;
+}

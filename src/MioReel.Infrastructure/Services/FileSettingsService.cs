@@ -89,7 +89,8 @@ public sealed class FileSettingsService : ISettingsService
             "MioReel",
             "Downloads"),
         GatewayBaseUrl: "https://miaomiaotv.diaofanle.com",
-        GatewayToken: "248b4593caed441eb05ae0f124cf04cb");
+        GatewayToken: "248b4593caed441eb05ae0f124cf04cb",
+        Hotkeys: HotkeySettings.CreateDefaults());
 
     private static AppSettings Normalize(AppSettings value, AppSettings? fallback = null)
     {
@@ -104,7 +105,8 @@ public sealed class FileSettingsService : ISettingsService
             GatewayBaseUrl = string.IsNullOrWhiteSpace(value.GatewayBaseUrl)
                 ? baseFallback.GatewayBaseUrl
                 : value.GatewayBaseUrl.Trim(),
-            GatewayToken = (value.GatewayToken ?? string.Empty).Trim()
+            GatewayToken = (value.GatewayToken ?? string.Empty).Trim(),
+            Hotkeys = (value.Hotkeys ?? baseFallback.Hotkeys ?? HotkeySettings.CreateDefaults()).EnsurePopulated()
         };
     }
 }

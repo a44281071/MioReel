@@ -198,6 +198,7 @@ public sealed record AppSettings(
     VideoRenderMode RenderMode = VideoRenderMode.Auto,
     WindowPlacement? NormalWindow = null,
     WindowPlacement? MiniWindow = null,
-    double PlaybackRate = 1.0);
+    double PlaybackRate = 1.0,
+    HotkeySettings? Hotkeys = null);
 
 public sealed record WindowPlacement(int X, int Y, double Width, double Height, bool IsMaximized = false);

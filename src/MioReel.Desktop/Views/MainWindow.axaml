@@ -455,15 +455,20 @@
                             BorderThickness="1"
                             Background="{StaticResource PlayerStageBackdropBrush}"
                             ClipToBounds="True"
-                            PointerEntered="OnMiniStagePointerEntered"
-                            PointerExited="OnMiniStagePointerExited"
-                            PointerPressed="OnMiniStagePointerPressed"
-                            DoubleTapped="OnMiniStageDoubleTapped">
+                            PointerEntered="OnStagePointerEntered"
+                            PointerMoved="OnStagePointerMoved"
+                            PointerExited="OnStagePointerExited"
+                            PointerPressed="OnStagePointerPressed"
+                            DoubleTapped="OnStageDoubleTapped"
+                            PointerWheelChanged="OnStagePointerWheelChanged">
                       <Grid RowDefinitions="Auto,*,Auto">
                         <!-- Row 0: Docked Mini Top Bar (NativeSurface Mode) -->
-                        <controls:PlayerMiniTopBar Grid.Row="0"
+                        <controls:PlayerMiniTopBar x:Name="DockedMiniTopBar"
+                                                   Grid.Row="0"
                                                    DataContext="{Binding Player}"
-                                                   IsVisible="{Binding UseDockedMiniTopBar}" />
+                                                   IsVisible="{Binding UseDockedMiniTopBar}"
+                                                   PointerEntered="OnStageControlPointerEntered"
+                                                   PointerExited="OnStageControlPointerExited" />
 
                         <!-- Row 1: Video Viewport -->
                         <Grid x:Name="PlayerViewportHost"
@@ -474,7 +479,9 @@
                                   VerticalAlignment="Center"
                                   CornerRadius="16"
                                   ClipToBounds="True"
-                                  Background="#08090E">
+                                  Background="#08090E"
+                                  PointerEntered="OnViewportPointerEntered"
+                                  PointerExited="OnViewportPointerExited">
                             <aviora:Hero Tag="{Binding Player.HeroTag}" CornerRadius="16">
                               <Grid>
                                 <!-- Cover backdrop before / during stream transition -->
@@ -491,7 +498,8 @@
                                               IsVisible="{Binding Player.HasRealMediaUrl}" />
 
                                 <!-- Floating Mini Top Bar (Non-NativeSurface) -->
-                                <controls:PlayerMiniTopBar VerticalAlignment="Top"
+                                <controls:PlayerMiniTopBar x:Name="FloatingMiniTopBar"
+                                                           VerticalAlignment="Top"
                                                            DataContext="{Binding Player}"
                                                            IsVisible="{Binding UseFloatingMiniTopBar}" />
 
@@ -526,7 +534,8 @@
                                 </Border>
 
                                 <!-- Floating Transport Bar (Non-NativeSurface) -->
-                                <controls:PlayerTransportBar VerticalAlignment="Bottom"
+                                <controls:PlayerTransportBar x:Name="FloatingTransportBar"
+                                                             VerticalAlignment="Bottom"
                                                              Margin="10"
                                                              DataContext="{Binding Player}"
                                                              IsVisible="{Binding UseFloatingHud}" />
@@ -548,7 +557,9 @@
                               Margin="10,6,10,10"
                               IsVisible="{Binding Player.UseDockedHud}">
                           <controls:PlayerTransportBar x:Name="DockedTransportBar"
-                                                       DataContext="{Binding Player}" />
+                                                       DataContext="{Binding Player}"
+                                                       PointerEntered="OnStageControlPointerEntered"
+                                                       PointerExited="OnStageControlPointerExited" />
                           <!-- Floating Popup Window ABOVE NativeSurface HWND without shrinking video layout -->
                           <Popup x:Name="DockedMenuPopup"
                                  PlacementTarget="{Binding #DockedTransportBar}"

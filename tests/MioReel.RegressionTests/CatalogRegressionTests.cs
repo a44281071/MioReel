@@ -8,6 +8,7 @@ using MioReel.Desktop.ViewModels;
 using MioReel.Infrastructure.Services;
 using ReactiveUI.Primitives;
 using MioReel.Desktop.Services;
+using MioReel.Desktop.Services.Hotkeys;
 using Avalonia;
 
 internal static class CatalogRegressionTests
@@ -90,6 +91,28 @@ internal static class CatalogRegressionTests
         Assert(fitted.X == 1560 && fitted.Y == 0, "显示器变化后小窗还原到可见工作区");
         fitted = WindowPlacementPolicy.Fit(new WindowPlacement(-1800, 100, 900, 600), new PixelRect(-1920, 0, 1920, 1080), 1.5, false);
         Assert(fitted.X == -1800 && fitted.Y == 100, "窗口位置兼容负坐标及不同缩放比例");
+
+        var workArea = new PixelRect(0, 0, 1920, 1080);
+        var bounds16x9 = WindowPlacementPolicy.GetMiniSizeBounds(workArea, 1.0, 16.0 / 9.0);
+        Assert(bounds16x9.MinHeight == 160 && bounds16x9.MinWidth == 284, "横屏小窗最小尺寸按16:9等比缩放");
+        var bounds9x16 = WindowPlacementPolicy.GetMiniSizeBounds(workArea, 1.0, 9.0 / 16.0);
+        Assert(bounds9x16.MinWidth == 260 && bounds9x16.MinHeight == 462, "竖屏小窗最小尺寸按9:16等比缩放");
+
+        var miniLandscape = WindowPlacementPolicy.FitMiniForAspect(
+            new WindowPlacement(1500, 240, 360, 640), new PixelPoint(100, 100), null, workArea, 1.0, 1920, 1080);
+        Assert(miniLandscape.Width == 640 && miniLandscape.Height == 360 && miniLandscape.X == 1280, "竖屏小窗切横屏视频时按视频比例重构尺寸并贴齐工作区");
+
+        var scaledUp = WindowPlacementPolicy.ScaleMiniPlacement(miniLandscape, 1.25, workArea, 1.0, 1920, 1080);
+        Assert(scaledUp.Width == 800 && scaledUp.Height == 450, "小窗放大保持视频16:9尺寸比例");
+        var scaledDown = WindowPlacementPolicy.ScaleMiniPlacement(miniLandscape, 0.2, workArea, 1.0, 1920, 1080);
+        Assert(scaledDown.Width == 284 && scaledDown.Height == 160, "小窗缩小到最小边界仍保持16:9比例");
+
+        var snappedRight = WindowPlacementPolicy.SnapMiniDimensions(
+            480, 600, 360, 640, WindowPlacementPolicy.EdgeRight, 260, 462, 607, 1080, 9.0 / 16.0);
+        Assert(snappedRight.ClientWidth == 480 && snappedRight.ClientHeight == 853, "拖动小窗右边沿按竖屏视频比例联动高度");
+        var snappedTop = WindowPlacementPolicy.SnapMiniDimensions(
+            400, 270, 544, 306, WindowPlacementPolicy.EdgeTop, 284, 160, 1920, 1080, 16.0 / 9.0);
+        Assert(snappedTop.ClientHeight == 270 && snappedTop.ClientWidth == 480, "拖动小窗上边沿按横屏视频比例联动宽度");
     }
 
     private static MainWindowViewModel Create(IDramaCatalogService source, ISettingsService? settingsOverride = null)
@@ -99,7 +122,8 @@ internal static class CatalogRegressionTests
         var toast = DispatchProxy.Create<IToastService, NoopProxy>();
         var player = new PlayerViewModel(source, new ProxyStub(), history, settings, toast);
         return new MainWindowViewModel(source, history, new InMemoryDownloadService(), settings,
-            DispatchProxy.Create<IDialogService, NoopProxy>(), DispatchProxy.Create<ILoadingService, NoopProxy>(), toast, player);
+            DispatchProxy.Create<IDialogService, NoopProxy>(), DispatchProxy.Create<ILoadingService, NoopProxy>(), toast,
+            new NullGlobalHotkeyService("test"), player);
     }
 
     private static List<DramaItem> Items(int first, int count) => Enumerable.Range(first, count)

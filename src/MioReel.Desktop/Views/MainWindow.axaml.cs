@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MioReel.Core.Abstractions;
 using MioReel.Core.Models;
 using MioReel.Desktop.Services;
+using MioReel.Desktop.Services.Hotkeys;
 using MioReel.Desktop.ViewModels;
 
 namespace MioReel.Desktop.Views;
@@ -32,18 +33,32 @@ public partial class MainWindow : Window
     private int _eofStalledTicks;
     private bool _eofNotifiedForCurrentUrl;
     private bool _suppressMiniDragOnce;
-    private IPointer? _miniPointer;
+    private IPointer? _stagePointer;
     private long _lastDownloadRefreshTick;
-    private readonly DispatcherTimer _miniControlsHideTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private readonly DispatcherTimer _controlsExitHideTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private readonly DispatcherTimer _controlsIdleHideTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private Point? _lastStagePointerPos;
+    private WinPoint? _lastNativeCursorPos;
+    private bool _isAdjustingMiniAspect;
+    private Win32Properties.CustomWndProcHookCallback? _wndProcHook;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct WinPoint { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WinRect { public int Left; public int Top; public int Right; public int Bottom; }
 
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out WinPoint lpPoint);
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out WinRect lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr hWnd, out WinRect lpRect);
 
     public MainWindow()
     {
@@ -54,6 +69,7 @@ public partial class MainWindow : Window
     public MainWindow(
         MainWindowViewModel viewModel,
         ISettingsService settings,
+        IGlobalHotkeyService globalHotkeys,
         IDrawerHostService drawerService,
         IDialogHostService dialogService,
         ILoadingHostService loadingService,
@@ -64,6 +80,9 @@ public partial class MainWindow : Window
         _settings = settings;
         _normalPlacement = settings.Current.NormalWindow;
         _miniPlacement = settings.Current.MiniWindow;
+
+        globalHotkeys.HotkeyTriggered += OnGlobalHotkeyTriggered;
+        Closing += (_, _) => globalHotkeys.HotkeyTriggered -= OnGlobalHotkeyTriggered;
 
         DrawerHost.Service = drawerService;
         DialogHost.Service = dialogService;
@@ -96,12 +115,18 @@ public partial class MainWindow : Window
 
         _playbackSyncTimer.Tick += OnPlaybackSyncTick;
         _playbackSyncTimer.Start();
-        _miniControlsHideTimer.Tick += OnMiniControlsHideTick;
+        _controlsExitHideTimer.Tick += OnControlsExitHideTick;
+        _controlsIdleHideTimer.Tick += OnControlsIdleHideTick;
 
         SizeChanged += OnWindowSizeChanged;
         PositionChanged += (_, _) => RememberWindowBounds();
         Opened += (_, _) =>
         {
+            if (OperatingSystem.IsWindows())
+            {
+                _wndProcHook = OnWin32WndProc;
+                Win32Properties.AddWndProcHookCallback(this, _wndProcHook);
+            }
             if (_normalPlacement is { } placement) ApplyWindowPlacement(placement, false);
             else RememberWindowBounds();
         };
@@ -116,7 +141,10 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _playbackSyncTimer.Stop();
-            _miniControlsHideTimer.Stop();
+            _controlsExitHideTimer.Stop();
+            _controlsIdleHideTimer.Stop();
+            if (OperatingSystem.IsWindows() && _wndProcHook is not null)
+                Win32Properties.RemoveWndProcHookCallback(this, _wndProcHook);
             _viewModel.Player.Close();
         };
         PropertyChanged += (_, e) =>
@@ -124,7 +152,7 @@ public partial class MainWindow : Window
             if (e.Property == WindowStateProperty)
                 UpdateMaximizeIcons();
         };
-        _viewModel.Player.StreamDimensionsChanged += FitPlayerViewport;
+        _viewModel.Player.StreamDimensionsChanged += OnStreamDimensionsChanged;
         _viewModel.Player.MiniModeChanged += OnMiniModeChanged;
         _viewModel.Player.MiniPinChanged += pinned => Topmost = pinned;
         _viewModel.Player.RenderModeChanged += OnRenderModeChanged;
@@ -147,12 +175,9 @@ public partial class MainWindow : Window
         if (!_viewModel.Player.IsOpen)
             return;
 
-        if (_viewModel.Player.IsMiniMode && _viewModel.Player.IsNativeSurfaceMode && !_viewModel.Player.IsAnyMenuOpen)
+        if (_viewModel.Player.IsNativeSurfaceMode && !_viewModel.Player.IsAnyMenuOpen)
         {
-            if (IsNativeCursorOverStage())
-                ShowMiniControls();
-            else
-                ScheduleMiniControlsHide();
+            UpdateNativeSurfaceControlsVisibility();
         }
 
         // In NativeSurface mode, child HWND consumes clicks directly without raising MainWindow PointerPressed.
@@ -250,31 +275,101 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool IsNativeCursorOverStage() => IsCursorOverVisual(PlayerStageWrap);
+    private void UpdateNativeSurfaceControlsVisibility()
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var pt))
+            return;
 
-    private bool IsCursorOverVisual(Visual? visual)
+        if (IsNativeCursorInActiveStage(pt))
+        {
+            _controlsExitHideTimer.Stop();
+            var moved = _lastNativeCursorPos is null
+                || _lastNativeCursorPos.Value.X != pt.X
+                || _lastNativeCursorPos.Value.Y != pt.Y;
+            if (moved)
+            {
+                _lastNativeCursorPos = pt;
+                ShowPlayerControls();
+            }
+            else if (_viewModel.Player.AreControlsVisible && !_controlsIdleHideTimer.IsEnabled && !ShouldKeepControlsVisible())
+            {
+                _controlsIdleHideTimer.Start();
+            }
+            return;
+        }
+
+        _lastNativeCursorPos = pt;
+        if (_viewModel.Player.AreControlsVisible && !_viewModel.Player.IsAnyMenuOpen)
+            ScheduleControlsExitHide();
+    }
+
+    private bool IsNativeCursorInActiveStage(WinPoint pt)
+    {
+        if (_viewModel.Player.IsMiniMode)
+            return IsPointOverVisual(PlayerStageWrap, pt) || DockedMenuPopup.IsPointerOverPopup;
+
+        if (IsPointOverVisual(PlayerViewportBox, pt))
+            return true;
+
+        if (!_viewModel.Player.AreControlsVisible)
+            return false;
+
+        if (IsPointOverVisual(DockedTransportBar, pt)
+            || IsPointOverVisual(FloatingTransportBar, pt)
+            || IsPointOverVisual(FloatingMenuPanel, pt)
+            || DockedMenuPopup.IsPointerOverPopup)
+            return true;
+
+        // Bridge the small gap between PlayerViewportBox and DockedTransportBar when docked controls shrink the viewport.
+        return IsPointOverVisual(PlayerStageWrap, pt) && IsPointHorizontallyWithin(PlayerViewportBox, pt);
+    }
+
+    private bool IsPointOverVisual(Visual? visual, WinPoint pt)
     {
         if (!OperatingSystem.IsWindows() || visual is null || !visual.IsEffectivelyVisible || !IsVisible)
             return false;
-        if (visual.Bounds.Width <= 0 || visual.Bounds.Height <= 0 || !GetCursorPos(out var pt))
+        if (visual.Bounds.Width <= 0 || visual.Bounds.Height <= 0)
             return false;
         var tl = visual.PointToScreen(new Point(0, 0));
         var br = visual.PointToScreen(new Point(visual.Bounds.Width, visual.Bounds.Height));
         return pt.X >= tl.X && pt.X <= br.X && pt.Y >= tl.Y && pt.Y <= br.Y;
     }
 
+    private bool IsPointHorizontallyWithin(Visual? visual, WinPoint pt)
+    {
+        if (!OperatingSystem.IsWindows() || visual is null || !visual.IsEffectivelyVisible || !IsVisible)
+            return false;
+        if (visual.Bounds.Width <= 0)
+            return false;
+        var tl = visual.PointToScreen(new Point(0, 0));
+        var br = visual.PointToScreen(new Point(visual.Bounds.Width, visual.Bounds.Height));
+        return pt.X >= tl.X && pt.X <= br.X;
+    }
+
+    private bool IsCursorOverVisual(Visual? visual) =>
+        OperatingSystem.IsWindows() && GetCursorPos(out var pt) && IsPointOverVisual(visual, pt);
+
     private void OnDockedMenuPopupClosed(object? sender, EventArgs e)
     {
         _viewModel.Player.CloseMenu();
-        ScheduleMiniControlsHide();
+        ScheduleControlsExitHide();
+        ResetControlsIdleTimer();
     }
 
     private void OnWindowTunnelPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_viewModel.Player.IsMiniMode && IsWithinPlayerStage(e.Source))
+        if (_viewModel.Player.IsOpen)
         {
-            _miniPointer = e.Pointer;
-            ShowMiniControls();
+            if (_viewModel.Player.IsMiniMode && IsWithinPlayerStage(e.Source))
+            {
+                _stagePointer = e.Pointer;
+                ShowPlayerControls(e.GetPosition(PlayerStageWrap));
+            }
+            else if (!_viewModel.Player.IsMiniMode && IsWithinPlayerViewportOrControls(e.Source))
+            {
+                _stagePointer = e.Pointer;
+                ShowPlayerControls(e.GetPosition(PlayerStageWrap));
+            }
         }
         if (!_viewModel.Player.IsAnyMenuOpen)
             return;
@@ -301,8 +396,33 @@ public partial class MainWindow : Window
 
     private void OnPlayerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlayerViewModel.IsAnyMenuOpen) && !_viewModel.Player.IsAnyMenuOpen)
-            ScheduleMiniControlsHide();
+        if (e.PropertyName == nameof(PlayerViewModel.IsOpen))
+        {
+            if (_viewModel.Player.IsOpen)
+            {
+                _lastStagePointerPos = null;
+                _lastNativeCursorPos = null;
+                ShowPlayerControls();
+            }
+            else
+            {
+                _controlsExitHideTimer.Stop();
+                _controlsIdleHideTimer.Stop();
+            }
+        }
+        else if (e.PropertyName == nameof(PlayerViewModel.IsAnyMenuOpen))
+        {
+            if (_viewModel.Player.IsAnyMenuOpen)
+            {
+                _controlsExitHideTimer.Stop();
+                _controlsIdleHideTimer.Stop();
+            }
+            else
+            {
+                ResetControlsIdleTimer();
+                ScheduleControlsExitHide();
+            }
+        }
 
         if (e.PropertyName == nameof(PlayerViewModel.ResolvedPlayUrl))
         {
@@ -368,10 +488,11 @@ public partial class MainWindow : Window
     private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         var w = e.NewSize.Width;
+        var h = e.NewSize.Height;
         if (!_viewModel.Player.IsMiniMode && !_isTransitioningMini && w >= 600)
         {
             _normalWidth = w;
-            _normalHeight = e.NewSize.Height;
+            _normalHeight = h;
         }
 
         _viewModel.LayoutMode = w switch
@@ -384,6 +505,19 @@ public partial class MainWindow : Window
         UpdatePlayerSplitLayout();
         FitPlayerViewport();
         RememberWindowBounds();
+
+        if (_viewModel.Player.IsMiniMode
+            && !_isTransitioningMini
+            && !_isAdjustingMiniAspect
+            && !_isClosing
+            && WindowState == WindowState.Normal
+            && w > 0
+            && h > 0)
+        {
+            var ratio = WindowPlacementPolicy.GetVideoAspectRatio(_viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+            if (Math.Abs((w / h) - ratio) > 0.025)
+                Dispatcher.UIThread.Post(SyncMiniWindowToVideoAspect, DispatcherPriority.Render);
+        }
     }
 
     private void UpdatePlayerSplitLayout()
@@ -426,7 +560,134 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnStreamDimensionsChanged()
+    {
+        FitPlayerViewport();
+        if (_viewModel.Player.IsMiniMode && !_isTransitioningMini && !_isClosing)
+            SyncMiniWindowToVideoAspect();
+    }
+
     private void OnPlayerStageSizeChanged(object? sender, SizeChangedEventArgs e) => FitPlayerViewport();
+
+    private void UpdateWindowMinSize(bool isMini)
+    {
+        if (!isMini)
+        {
+            MinWidth = WindowPlacementPolicy.NormalMinWidth;
+            MinHeight = WindowPlacementPolicy.NormalMinHeight;
+            return;
+        }
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = screen?.Scaling ?? RenderScaling;
+        var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+        var ratio = WindowPlacementPolicy.GetVideoAspectRatio(_viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+        var (minW, minH, _, _) = WindowPlacementPolicy.GetMiniSizeBounds(workArea, scale, ratio);
+        MinWidth = minW;
+        MinHeight = minH;
+    }
+
+    private void SyncMiniWindowToVideoAspect()
+    {
+        if (!_viewModel.Player.IsMiniMode || _isTransitioningMini || _isClosing || WindowState == WindowState.Minimized)
+            return;
+
+        UpdateWindowMinSize(true);
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = screen?.Scaling ?? RenderScaling;
+        if (!double.IsFinite(scale) || scale <= 0) scale = 1;
+        var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+
+        var curBounds = Bounds;
+        var saved = curBounds.Width > 0 && curBounds.Height > 0
+            ? new WindowPlacement(Position.X, Position.Y, curBounds.Width, curBounds.Height)
+            : _miniPlacement;
+        Point? center = curBounds.Width > 0 && curBounds.Height > 0
+            ? new Point(Position.X + (curBounds.Width * scale) / 2.0, Position.Y + (curBounds.Height * scale) / 2.0)
+            : null;
+
+        var target = WindowPlacementPolicy.FitMiniForAspect(
+            saved, Position, center, workArea, scale,
+            _viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+
+        ApplyMiniAspectPlacement(target);
+    }
+
+    private void ApplyMiniAspectPlacement(WindowPlacement target)
+    {
+        _isAdjustingMiniAspect = true;
+        try
+        {
+            Width = target.Width;
+            Height = target.Height;
+            Position = new PixelPoint(target.X, target.Y);
+        }
+        finally
+        {
+            _isAdjustingMiniAspect = false;
+        }
+        _miniPlacement = target;
+        FitPlayerViewport();
+    }
+
+    private IntPtr OnWin32WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const uint WmSizing = 0x0214;
+        if (msg != WmSizing || lParam == IntPtr.Zero || !_viewModel.Player.IsMiniMode || _isTransitioningMini || _isClosing)
+            return IntPtr.Zero;
+
+        if (!GetWindowRect(hWnd, out var wr) || !GetClientRect(hWnd, out var cr))
+            return IntPtr.Zero;
+
+        var frameW = Math.Max(0, (wr.Right - wr.Left) - (cr.Right - cr.Left));
+        var frameH = Math.Max(0, (wr.Bottom - wr.Top) - (cr.Bottom - cr.Top));
+        var left = Marshal.ReadInt32(lParam, 0);
+        var top = Marshal.ReadInt32(lParam, 4);
+        var right = Marshal.ReadInt32(lParam, 8);
+        var bottom = Marshal.ReadInt32(lParam, 12);
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = screen?.Scaling ?? RenderScaling;
+        if (!double.IsFinite(scale) || scale <= 0) scale = 1;
+        var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+        var ratio = WindowPlacementPolicy.GetVideoAspectRatio(_viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+        var (minDipW, minDipH, maxDipW, maxDipH) = WindowPlacementPolicy.GetMiniSizeBounds(workArea, scale, ratio);
+
+        var minCW = Math.Max(1, (int)Math.Round(minDipW * scale));
+        var minCH = Math.Max(1, (int)Math.Round(minDipH * scale));
+        var maxCW = Math.Max(minCW, (int)Math.Floor(maxDipW * scale));
+        var maxCH = Math.Max(minCH, (int)Math.Floor(maxDipH * scale));
+
+        var edge = (int)wParam;
+        var proposedCW = (right - left) - frameW;
+        var proposedCH = (bottom - top) - frameH;
+        var curCW = cr.Right - cr.Left;
+        var curCH = cr.Bottom - cr.Top;
+
+        var (cw, ch) = WindowPlacementPolicy.SnapMiniDimensions(
+            proposedCW, proposedCH, curCW, curCH, edge,
+            minCW, minCH, maxCW, maxCH, ratio);
+
+        var newOuterW = cw + frameW;
+        var newOuterH = ch + frameH;
+
+        if (edge is WindowPlacementPolicy.EdgeLeft or WindowPlacementPolicy.EdgeTopLeft or WindowPlacementPolicy.EdgeBottomLeft)
+            left = right - newOuterW;
+        else
+            right = left + newOuterW;
+
+        if (edge is WindowPlacementPolicy.EdgeTop or WindowPlacementPolicy.EdgeTopLeft or WindowPlacementPolicy.EdgeTopRight)
+            top = bottom - newOuterH;
+        else
+            bottom = top + newOuterH;
+
+        Marshal.WriteInt32(lParam, 0, left);
+        Marshal.WriteInt32(lParam, 4, top);
+        Marshal.WriteInt32(lParam, 8, right);
+        Marshal.WriteInt32(lParam, 12, bottom);
+        handled = true;
+        return new IntPtr(1);
+    }
 
     private void FitPlayerViewport()
     {
@@ -454,15 +715,36 @@ public partial class MainWindow : Window
     private void OnMiniModeChanged(bool isMini, bool isLandscape)
     {
         if (_isClosing) return;
-        _miniControlsHideTimer.Stop();
-        _miniPointer = null;
+        _controlsExitHideTimer.Stop();
+        _controlsIdleHideTimer.Stop();
+        _stagePointer = null;
+        _lastStagePointerPos = null;
+        _lastNativeCursorPos = null;
         RememberWindowBounds();
         SaveWindowPlacements();
         _isTransitioningMini = true;
         _displayedMini = isMini;
-        var target = isMini
-            ? _miniPlacement ?? new WindowPlacement(Position.X, Position.Y, isLandscape ? 544 : 360, isLandscape ? 306 : 640)
-            : _normalPlacement ?? new WindowPlacement(Position.X, Position.Y, _normalWidth, _normalHeight);
+
+        WindowPlacement target;
+        double targetScale = 1;
+        if (isMini)
+        {
+            var refPt = _miniPlacement is { } mp ? new PixelPoint(mp.X, mp.Y) : Position;
+            var screen = Screens.ScreenFromPoint(refPt) ?? Screens.Primary;
+            targetScale = screen?.Scaling ?? RenderScaling;
+            if (!double.IsFinite(targetScale) || targetScale <= 0) targetScale = 1;
+            var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+            target = WindowPlacementPolicy.FitMiniForAspect(
+                _miniPlacement, Position, null, workArea, targetScale,
+                _viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+            if (OperatingSystem.IsWindows() && !IsScreenCursorWithinPlacement(target, targetScale))
+                _viewModel.Player.SetControlsVisible(false);
+        }
+        else
+        {
+            target = _normalPlacement ?? new WindowPlacement(Position.X, Position.Y, _normalWidth, _normalHeight);
+        }
+
         WindowState = WindowState.Normal;
         if (isMini)
         {
@@ -474,23 +756,53 @@ public partial class MainWindow : Window
             Topmost = false;
             WindowDecorations = Avalonia.Controls.WindowDecorations.Full;
         }
+        UpdateWindowMinSize(isMini);
         ApplyWindowPlacement(target, isMini);
         UpdatePlayerSplitLayout();
         FitPlayerViewport();
         Dispatcher.UIThread.Post(() =>
         {
             if (_displayedMini != isMini || _isClosing) return;
+            UpdateWindowMinSize(isMini);
             ApplyWindowPlacement(target, isMini);
             UpdatePlayerSplitLayout();
             FitPlayerViewport();
             _isTransitioningMini = false;
             RememberWindowBounds();
+            if (isMini)
+            {
+                if (IsCursorInActiveStage())
+                {
+                    if (OperatingSystem.IsWindows() && GetCursorPos(out var pt))
+                        _lastNativeCursorPos = pt;
+                    ShowPlayerControls();
+                }
+                else
+                {
+                    _controlsExitHideTimer.Stop();
+                    _controlsIdleHideTimer.Stop();
+                    _viewModel.Player.SetControlsVisible(false);
+                }
+            }
+            else
+            {
+                ResetControlsIdleTimer();
+            }
         }, DispatcherPriority.Background);
+    }
+
+    private static bool IsScreenCursorWithinPlacement(WindowPlacement placement, double scale)
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var pt))
+            return false;
+        var right = placement.X + (int)Math.Ceiling(placement.Width * scale);
+        var bottom = placement.Y + (int)Math.Ceiling(placement.Height * scale);
+        return pt.X >= placement.X && pt.X <= right && pt.Y >= placement.Y && pt.Y <= bottom;
     }
 
     private void RememberWindowBounds()
     {
-        if (_isTransitioningMini || _isClosing || !IsVisible || WindowState == WindowState.Minimized) return;
+        if (_isTransitioningMini || _isAdjustingMiniAspect || _isClosing || !IsVisible || WindowState == WindowState.Minimized) return;
         if (!_displayedMini && WindowState == WindowState.Maximized)
         {
             if (_normalPlacement is { } normal) _normalPlacement = normal with { IsMaximized = true };
@@ -565,29 +877,144 @@ public partial class MainWindow : Window
         PlayerRestoreIcon.IsVisible = isMax;
     }
 
-    private void OnMiniStagePointerEntered(object? sender, PointerEventArgs e)
+    private void OnStagePointerEntered(object? sender, PointerEventArgs e)
     {
-        _miniPointer = e.Pointer;
+        _stagePointer = e.Pointer;
+        if (_isTransitioningMini) return;
+        if (_viewModel.Player.IsOpen && _viewModel.Player.IsMiniMode
+            && (!OperatingSystem.IsWindows() || IsCursorInActiveStage()))
+            ShowPlayerControls(e.GetPosition(PlayerStageWrap));
+    }
+
+    private void OnStagePointerExited(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (_viewModel.Player.IsOpen)
+            ScheduleControlsExitHide();
+    }
+
+    private void OnViewportPointerEntered(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (_isTransitioningMini) return;
+        if (_viewModel.Player.IsOpen && !_viewModel.Player.IsMiniMode)
+            ShowPlayerControls(e.GetPosition(PlayerStageWrap));
+    }
+
+    private void OnViewportPointerExited(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (_viewModel.Player.IsOpen && !_viewModel.Player.IsMiniMode)
+            ScheduleControlsExitHide();
+    }
+
+    private void OnStageControlPointerEntered(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (!_viewModel.Player.IsOpen) return;
+        _controlsExitHideTimer.Stop();
+        _controlsIdleHideTimer.Stop();
+    }
+
+    private void OnStageControlPointerExited(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (!_viewModel.Player.IsOpen) return;
+        ScheduleControlsExitHide();
+        ResetControlsIdleTimer();
+    }
+
+    private void OnStagePointerMoved(object? sender, PointerEventArgs e)
+    {
+        _stagePointer = e.Pointer;
+        if (_isTransitioningMini || !_viewModel.Player.IsOpen || _viewModel.Player.IsNativeSurfaceMode)
+            return;
+
+        var pos = e.GetPosition(PlayerStageWrap);
+        if (_lastStagePointerPos is { } last
+            && Math.Abs(pos.X - last.X) < 1
+            && Math.Abs(pos.Y - last.Y) < 1)
+            return;
+
+        _lastStagePointerPos = pos;
         if (_viewModel.Player.IsMiniMode)
-            ShowMiniControls();
+        {
+            if (!OperatingSystem.IsWindows() || IsCursorInActiveStage())
+                ShowPlayerControls(pos);
+        }
+        else if (IsWithinPlayerViewportOrControls(e.Source))
+            ShowPlayerControls(pos);
+        else if (_viewModel.Player.AreControlsVisible)
+            ScheduleControlsExitHide();
     }
 
-    private void OnMiniStagePointerExited(object? sender, PointerEventArgs e)
+    private void ShowPlayerControls(Point? pointerPos = null)
     {
-        _miniPointer = e.Pointer;
-        ScheduleMiniControlsHide();
+        if (pointerPos is { } pos)
+            _lastStagePointerPos = pos;
+        _controlsExitHideTimer.Stop();
+        _viewModel.Player.SetControlsVisible(true);
+        ResetControlsIdleTimer();
     }
 
-    private void ShowMiniControls()
+    private void ResetControlsIdleTimer()
     {
-        _miniControlsHideTimer.Stop();
-        _viewModel.Player.SetMiniControlsVisible(true);
+        _controlsIdleHideTimer.Stop();
+        if (!_viewModel.Player.IsOpen || _isClosing || ShouldKeepControlsVisible())
+            return;
+        if (_viewModel.Player.AreControlsVisible)
+            _controlsIdleHideTimer.Start();
     }
 
-    private void ScheduleMiniControlsHide()
+    private void ScheduleControlsExitHide()
     {
-        if (_viewModel.Player.IsMiniMode && _viewModel.Player.AreMiniControlsVisible && !_miniControlsHideTimer.IsEnabled)
-            _miniControlsHideTimer.Start();
+        if (_viewModel.Player.IsOpen && _viewModel.Player.AreControlsVisible && !_controlsExitHideTimer.IsEnabled)
+            _controlsExitHideTimer.Start();
+    }
+
+    private bool ShouldKeepControlsVisible(bool forExitCheck = false)
+    {
+        if (_viewModel.Player.IsAnyMenuOpen || DockedMenuPopup.IsPointerOverPopup)
+            return true;
+        if (_viewModel.Player.HasStreamError)
+            return true;
+        if (IsWithinPlayerStage(_stagePointer?.Captured))
+            return true;
+        if (!forExitCheck && _viewModel.Player.AreControlsVisible && IsPointerOverControls())
+            return true;
+        return false;
+    }
+
+    private bool IsPointerOverControls()
+    {
+        if (OperatingSystem.IsWindows() && GetCursorPos(out var pt))
+        {
+            return IsPointOverVisual(FloatingTransportBar, pt)
+                || IsPointOverVisual(DockedTransportBar, pt)
+                || IsPointOverVisual(FloatingMenuPanel, pt)
+                || IsPointOverVisual(FloatingMiniTopBar, pt)
+                || IsPointOverVisual(DockedMiniTopBar, pt)
+                || DockedMenuPopup.IsPointerOverPopup;
+        }
+
+        return FloatingTransportBar.IsPointerOver
+            || DockedTransportBar.IsPointerOver
+            || FloatingMenuPanel.IsPointerOver
+            || FloatingMiniTopBar.IsPointerOver
+            || DockedMiniTopBar.IsPointerOver
+            || DockedMenuPopup.IsPointerOverPopup;
+    }
+
+    private bool IsCursorInActiveStage()
+    {
+        if (OperatingSystem.IsWindows() && GetCursorPos(out var pt))
+            return IsNativeCursorInActiveStage(pt);
+
+        if (_viewModel.Player.IsMiniMode)
+            return PlayerStageWrap.IsPointerOver || DockedMenuPopup.IsPointerOverPopup;
+
+        return PlayerViewportBox.IsPointerOver
+            || (_viewModel.Player.AreControlsVisible && IsPointerOverControls());
     }
 
     private bool IsWithinPlayerStage(object? source)
@@ -597,45 +1024,84 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private void OnMiniControlsHideTick(object? sender, EventArgs e)
+    private bool IsWithinPlayerViewportOrControls(object? source)
     {
-        _miniControlsHideTimer.Stop();
-        if (!_viewModel.Player.IsMiniMode || _isClosing) return;
+        for (var visual = source as Visual; visual is not null; visual = Avalonia.VisualTree.VisualExtensions.GetVisualParent(visual))
+        {
+            if (ReferenceEquals(visual, PlayerViewportBox)
+                || ReferenceEquals(visual, DockedTransportBar)
+                || ReferenceEquals(visual, FloatingTransportBar)
+                || ReferenceEquals(visual, FloatingMenuPanel)
+                || ReferenceEquals(visual, DockedMenuPanel))
+                return true;
+        }
+        return false;
+    }
+
+    private void OnControlsExitHideTick(object? sender, EventArgs e)
+    {
+        _controlsExitHideTimer.Stop();
+        if (!_viewModel.Player.IsOpen || _isClosing) return;
 
         // Button/slider capture can produce PointerExited before release. Keep the control
         // alive until its click/drag completes, even if the pointer has left the window.
-        if (IsWithinPlayerStage(_miniPointer?.Captured))
+        if (IsWithinPlayerStage(_stagePointer?.Captured))
         {
-            ScheduleMiniControlsHide();
+            ScheduleControlsExitHide();
             return;
         }
-        if (_viewModel.Player.IsAnyMenuOpen || DockedMenuPopup.IsPointerOverPopup) return;
-        var inside = OperatingSystem.IsWindows() ? IsNativeCursorOverStage() : PlayerStageWrap.IsPointerOver;
-        if (!inside) _viewModel.Player.SetMiniControlsVisible(false);
+        if (ShouldKeepControlsVisible(forExitCheck: true)) return;
+        if (!IsCursorInActiveStage())
+        {
+            _controlsIdleHideTimer.Stop();
+            _viewModel.Player.SetControlsVisible(false);
+        }
     }
 
-    private void OnMiniStageDoubleTapped(object? sender, TappedEventArgs e)
+    private void OnControlsIdleHideTick(object? sender, EventArgs e)
+    {
+        _controlsIdleHideTimer.Stop();
+        if (!_viewModel.Player.IsOpen || !_viewModel.Player.AreControlsVisible || _isClosing)
+            return;
+
+        if (ShouldKeepControlsVisible())
+        {
+            _controlsIdleHideTimer.Start();
+            return;
+        }
+
+        _viewModel.Player.SetControlsVisible(false);
+    }
+
+    private void OnStageDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (!_viewModel.Player.IsMiniMode || IsInteractiveControl(e.Source))
             return;
-        _viewModel.Player.ToggleMiniControls();
+        ToggleControlsAndSyncIdle();
         e.Handled = true;
     }
 
-    private void OnMiniStagePointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnStagePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_suppressMiniDragOnce)
         {
             _suppressMiniDragOnce = false;
             return;
         }
-        if (!_viewModel.Player.IsMiniMode || IsInteractiveControl(e.Source))
+        if (!_viewModel.Player.IsOpen || IsInteractiveControl(e.Source))
             return;
+
+        if (!_viewModel.Player.IsMiniMode)
+        {
+            if (IsWithinPlayerViewportOrControls(e.Source))
+                ShowPlayerControls(e.GetPosition(PlayerStageWrap));
+            return;
+        }
 
         var props = e.GetCurrentPoint(this).Properties;
         if (props.IsRightButtonPressed)
         {
-            _viewModel.Player.ToggleMiniControls();
+            ToggleControlsAndSyncIdle();
             e.Handled = true;
             return;
         }
@@ -644,38 +1110,190 @@ public partial class MainWindow : Window
             BeginMoveDrag(e);
     }
 
+    private void ToggleControlsAndSyncIdle()
+    {
+        if (OperatingSystem.IsWindows() && GetCursorPos(out var pt))
+            _lastNativeCursorPos = pt;
+        _viewModel.Player.ToggleControlsVisibility();
+        if (_viewModel.Player.AreControlsVisible)
+            ResetControlsIdleTimer();
+        else
+            _controlsIdleHideTimer.Stop();
+    }
+
+    private void OnStagePointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (!_viewModel.Player.IsOpen || !_viewModel.Player.IsMiniMode || _isTransitioningMini || _isClosing)
+            return;
+        if (IsWithinMenuOrTrigger(e.Source) || Math.Abs(e.Delta.Y) < 0.01)
+            return;
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = screen?.Scaling ?? RenderScaling;
+        if (!double.IsFinite(scale) || scale <= 0) scale = 1;
+        var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+
+        var current = new WindowPlacement(Position.X, Position.Y, Bounds.Width, Bounds.Height);
+        var steps = Math.Clamp(e.Delta.Y, -3, 3);
+        var zoomFactor = Math.Pow(1.08, steps);
+        var target = WindowPlacementPolicy.ScaleMiniPlacement(
+            current, zoomFactor, workArea, scale,
+            _viewModel.Player.StreamWidth, _viewModel.Player.StreamHeight);
+
+        UpdateWindowMinSize(true);
+        ApplyMiniAspectPlacement(target);
+        e.Handled = true;
+    }
+
     private void OnGlobalSearchGotFocus(object? sender, FocusChangedEventArgs e)
     {
         _viewModel.FocusSearch();
     }
 
+    private void OnGlobalHotkeyTriggered(HotkeyAction action)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_isClosing) return;
+            switch (action)
+            {
+                case HotkeyAction.GlobalBossKey:
+                    ToggleBossHide();
+                    break;
+                case HotkeyAction.GlobalPlayPause:
+                    if (_viewModel.Player.IsOpen)
+                        _viewModel.Player.IsPlaying = !_viewModel.Player.IsPlaying;
+                    break;
+            }
+        });
+    }
+
+    public void ToggleBossHide()
+    {
+        if (IsVisible && WindowState != WindowState.Minimized)
+        {
+            if (_viewModel.Player.IsOpen && _viewModel.Player.IsPlaying)
+                _viewModel.Player.IsPlaying = false;
+            RememberWindowBounds();
+            SaveWindowPlacements();
+            Hide();
+            return;
+        }
+
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        if (_viewModel.Player.IsMiniMode)
+            Topmost = _viewModel.Player.IsMiniPinned;
+        Activate();
+    }
+
+    private void RestoreWindowFromHotkey()
+    {
+        if (!IsVisible)
+            Show();
+
+        if (_viewModel.Player.IsMiniMode)
+        {
+            ((System.Windows.Input.ICommand)_viewModel.Player.ToggleMiniModeCommand).Execute(null);
+            if (WindowState == WindowState.Maximized)
+                WindowState = WindowState.Normal;
+        }
+        else if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+    }
+
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!_viewModel.Player.IsOpen) return;
-        if (FocusManager?.GetFocusedElement() is TextBox) return;
+        if (_viewModel.ActiveRecordingAction is not null)
+            return;
+        if (FocusManager?.GetFocusedElement() is TextBox)
+            return;
+        if (!KeyNameMapper.TryFromAvalonia(e.Key, e.KeyModifiers, out var pressed))
+            return;
 
-        switch (e.Key)
+        var hotkeys = _viewModel.Hotkeys;
+        var modifiers = pressed.Modifiers;
+        var keyName = pressed.NormalizedKeyName;
+
+        if (hotkeys.GetBinding(HotkeyAction.RestoreWindow).Matches(modifiers, keyName))
         {
-            case Key.PageUp:
-                ((System.Windows.Input.ICommand)_viewModel.Player.PreviousEpisodeCommand).Execute(null);
-                e.Handled = true;
-                break;
-            case Key.PageDown:
-                ((System.Windows.Input.ICommand)_viewModel.Player.NextEpisodeCommand).Execute(null);
-                e.Handled = true;
-                break;
-            case Key.Space:
+            RestoreWindowFromHotkey();
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.Player.IsOpen)
+        {
+            if (hotkeys.GetBinding(HotkeyAction.PlayPause).Matches(modifiers, keyName))
+            {
                 _viewModel.Player.IsPlaying = !_viewModel.Player.IsPlaying;
+                ShowPlayerControls();
                 e.Handled = true;
-                break;
-            case Key.H:
-                if (_viewModel.Player.IsMiniMode)
-                {
-                    _viewModel.Player.ToggleMiniControls();
-                    e.Handled = true;
-                }
-                break;
-            case Key.Escape:
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.SeekBackward).Matches(modifiers, keyName))
+            {
+                _viewModel.Player.SeekBy(-5);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.SeekForward).Matches(modifiers, keyName))
+            {
+                _viewModel.Player.SeekBy(5);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.SpeedUp).Matches(modifiers, keyName))
+            {
+                _viewModel.Player.StepSpeed(1);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.SpeedDown).Matches(modifiers, keyName))
+            {
+                _viewModel.Player.StepSpeed(-1);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.SpeedReset).Matches(modifiers, keyName))
+            {
+                _viewModel.Player.ResetSpeed();
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.PreviousEpisode).Matches(modifiers, keyName))
+            {
+                ((System.Windows.Input.ICommand)_viewModel.Player.PreviousEpisodeCommand).Execute(null);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.NextEpisode).Matches(modifiers, keyName))
+            {
+                ((System.Windows.Input.ICommand)_viewModel.Player.NextEpisodeCommand).Execute(null);
+                ShowPlayerControls();
+                e.Handled = true;
+                return;
+            }
+            if (hotkeys.GetBinding(HotkeyAction.ToggleMiniMode).Matches(modifiers, keyName))
+            {
+                ((System.Windows.Input.ICommand)_viewModel.Player.ToggleMiniModeCommand).Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Escape)
+            {
                 if (_viewModel.Player.IsAnyMenuOpen)
                     _viewModel.Player.CloseMenu();
                 else if (_viewModel.Player.IsMiniMode)
@@ -683,15 +1301,7 @@ public partial class MainWindow : Window
                 else
                     _viewModel.Player.Close();
                 e.Handled = true;
-                break;
-            case Key.Left:
-                _viewModel.Player.PositionSeconds = Math.Max(0, _viewModel.Player.PositionSeconds - 5);
-                e.Handled = true;
-                break;
-            case Key.Right:
-                _viewModel.Player.PositionSeconds = Math.Min(_viewModel.Player.DurationSeconds, _viewModel.Player.PositionSeconds + 5);
-                e.Handled = true;
-                break;
+            }
         }
     }
 }

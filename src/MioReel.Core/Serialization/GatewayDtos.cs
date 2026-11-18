@@ -94,6 +94,8 @@ public sealed record GatewayResolveData(
 [JsonSerializable(typeof(GatewaySeriesRequest))]
 [JsonSerializable(typeof(GatewayResolveRequest))]
 [JsonSerializable(typeof(AppSettings))]
+[JsonSerializable(typeof(HotkeySettings))]
+[JsonSerializable(typeof(HotkeyBinding))]
 [JsonSerializable(typeof(List<HistoryRecord>))]
 [JsonSerializable(typeof(List<DownloadTaskItem>))]
 public sealed partial class MioReelJsonContext : JsonSerializerContext;

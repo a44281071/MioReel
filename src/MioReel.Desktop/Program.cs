@@ -6,6 +6,8 @@ using Aviora.Presentation.Loadings;
 using Aviora.Presentation.Toasts;
 using FrameFlux.Avalonia;
 using Microsoft.Extensions.DependencyInjection;
+using MioReel.Core.Abstractions;
+using MioReel.Desktop.Services.Hotkeys;
 using MioReel.Desktop.ViewModels;
 using MioReel.Desktop.Views;
 using MioReel.Infrastructure;
@@ -60,6 +62,7 @@ public static class Program
                 services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());
                 services.AddSingleton<IToastHostService>(sp => sp.GetRequiredService<ToastService>());
 
+                services.AddSingleton<IGlobalHotkeyService>(_ => GlobalHotkeyServiceFactory.Create());
                 services.AddSingleton<PlayerViewModel>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
