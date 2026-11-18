@@ -94,9 +94,9 @@ internal static class CatalogRegressionTests
 
         var workArea = new PixelRect(0, 0, 1920, 1080);
         var bounds16x9 = WindowPlacementPolicy.GetMiniSizeBounds(workArea, 1.0, 16.0 / 9.0);
-        Assert(bounds16x9.MinHeight == 160 && bounds16x9.MinWidth == 284, "横屏小窗最小尺寸按16:9等比缩放");
+        Assert(bounds16x9.MinHeight == 162 && bounds16x9.MinWidth == 288, "横屏小窗最小尺寸按16:9等比缩放");
         var bounds9x16 = WindowPlacementPolicy.GetMiniSizeBounds(workArea, 1.0, 9.0 / 16.0);
-        Assert(bounds9x16.MinWidth == 260 && bounds9x16.MinHeight == 462, "竖屏小窗最小尺寸按9:16等比缩放");
+        Assert(bounds9x16.MinWidth == 288 && bounds9x16.MinHeight == 512, "竖屏小窗最小尺寸按9:16等比缩放");
 
         var miniLandscape = WindowPlacementPolicy.FitMiniForAspect(
             new WindowPlacement(1500, 240, 360, 640), new PixelPoint(100, 100), null, workArea, 1.0, 1920, 1080);
@@ -105,18 +105,18 @@ internal static class CatalogRegressionTests
         var scaledUp = WindowPlacementPolicy.ScaleMiniPlacement(miniLandscape, 1.25, workArea, 1.0, 1920, 1080);
         Assert(scaledUp.Width == 800 && scaledUp.Height == 450, "小窗放大保持视频16:9尺寸比例");
         var scaledDown = WindowPlacementPolicy.ScaleMiniPlacement(miniLandscape, 0.2, workArea, 1.0, 1920, 1080);
-        Assert(scaledDown.Width == 284 && scaledDown.Height == 160, "小窗缩小到最小边界仍保持16:9比例");
+        Assert(scaledDown.Width == 288 && scaledDown.Height == 162, "小窗缩小到最小边界仍保持16:9比例");
 
         var snappedRight = WindowPlacementPolicy.SnapMiniDimensions(
-            480, 600, WindowPlacementPolicy.EdgeRight, 260, 462, 607, 1080, 9.0 / 16.0);
+            480, 600, WindowPlacementPolicy.EdgeRight, 288, 512, 607, 1080, 9.0 / 16.0);
         Assert(snappedRight.ClientWidth == 480 && snappedRight.ClientHeight == 853, "拖动小窗右边沿按竖屏视频比例联动高度");
         var snappedTop = WindowPlacementPolicy.SnapMiniDimensions(
-            400, 270, WindowPlacementPolicy.EdgeTop, 284, 160, 1920, 1080, 16.0 / 9.0);
+            400, 270, WindowPlacementPolicy.EdgeTop, 288, 162, 1920, 1080, 16.0 / 9.0);
         Assert(snappedTop.ClientHeight == 270 && snappedTop.ClientWidth == 480, "拖动小窗上边沿按横屏视频比例联动宽度");
         var corner1 = WindowPlacementPolicy.SnapMiniDimensions(
-            370, 642, WindowPlacementPolicy.EdgeBottomRight, 260, 462, 607, 1080, 9.0 / 16.0);
+            370, 642, WindowPlacementPolicy.EdgeBottomRight, 288, 512, 607, 1080, 9.0 / 16.0);
         var corner2 = WindowPlacementPolicy.SnapMiniDimensions(
-            371, 643, WindowPlacementPolicy.EdgeBottomRight, 260, 462, 607, 1080, 9.0 / 16.0);
+            371, 643, WindowPlacementPolicy.EdgeBottomRight, 288, 512, 607, 1080, 9.0 / 16.0);
         Assert(corner2.ClientWidth >= corner1.ClientWidth && corner2.ClientHeight >= corner1.ClientHeight, "拖动小窗角点连续放大保持单调递增不抖动");
     }
 

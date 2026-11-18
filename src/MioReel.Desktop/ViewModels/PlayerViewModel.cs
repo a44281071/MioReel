@@ -62,6 +62,10 @@ public sealed class PlayerViewModel : ReactiveObject
     private string _resolutionLabel = string.Empty;
     private bool _isPlaying = true;
     private double _playbackRate = 1.0;
+    private double _volume = 1.0;
+    private double _lastNonZeroVolume = 1.0;
+    private bool _isMuted;
+    private double _audioBoostDb;
     private readonly IDownloadService? _downloads;
     private bool _offlinePlayback;
     private int _selectedQuality = 1080;
@@ -80,6 +84,14 @@ public sealed class PlayerViewModel : ReactiveObject
     private string? _lastClosedMenuKey;
     private long _lastMenuClosedTickMs;
     private bool _isEffectiveNativeSurface;
+    private bool _isDanmakuEnabled = true;
+    private CancellationTokenSource? _danmakuCts;
+    private string? _activeDanmakuId;
+    private readonly HashSet<long> _fetchedDanmakuChunks = [];
+    private readonly HashSet<long> _inFlightDanmakuChunks = [];
+    private readonly HashSet<string> _seenDanmakuItemIds = new(StringComparer.Ordinal);
+    private readonly List<DanmakuItem> _loadedDanmakuItems = [];
+    private long? _danmakuEndMs;
 
     public PlayerViewModel(
         IDramaCatalogService catalog,
@@ -96,6 +108,15 @@ public sealed class PlayerViewModel : ReactiveObject
         _toast = toast;
         _downloads = downloads;
         _playbackRate = settings.Current.PlaybackRate;
+        _volume = settings.Current.Volume is { } savedVol && double.IsFinite(savedVol)
+            ? Math.Clamp(savedVol, 0.0, 1.0)
+            : 1.0;
+        _lastNonZeroVolume = _volume > 0.01 ? _volume : 0.5;
+        _isMuted = settings.Current.IsMuted;
+        _audioBoostDb = double.IsFinite(settings.Current.AudioBoostDb)
+            ? Math.Clamp(settings.Current.AudioBoostDb, 0.0, 24.0)
+            : 0.0;
+        _isDanmakuEnabled = settings.Current.DanmakuEnabled ?? true;
         _isMiniPinned = settings.Current.MiniWindowAlwaysOnTop;
         _selectedQuality = settings.Current.DefaultQuality > 0 ? settings.Current.DefaultQuality : 1080;
         _preferredQuality = _selectedQuality;
@@ -114,7 +135,14 @@ public sealed class PlayerViewModel : ReactiveObject
         ToggleMenuCommand = ReactiveCommand.Create<string>(ToggleMenu);
         CloseMenuCommand = ReactiveCommand.Create(CloseMenu);
         SelectMenuOptionCommand = ReactiveCommand.CreateFromTask<PlayerMenuOptionViewModel>(SelectActiveMenuOptionAsync);
+        ToggleMuteCommand = ReactiveCommand.Create(ToggleMute);
+        SetAudioBoostCommand = ReactiveCommand.Create<string>(raw =>
+        {
+            if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var db))
+                SetAudioBoost(db);
+        });
         ToggleMiniModeCommand = ReactiveCommand.Create(ToggleMiniMode);
+        ToggleDanmakuCommand = ReactiveCommand.Create(() => { IsDanmakuEnabled = !IsDanmakuEnabled; });
         ToggleMiniPinCommand = ReactiveCommand.Create(() =>
         {
             IsMiniPinned = !IsMiniPinned;
@@ -129,7 +157,11 @@ public sealed class PlayerViewModel : ReactiveObject
     public event Action? HistoryUpdated;
     public event Action<TimeSpan>? SeekRequested;
     public event Action<VideoRenderMode>? RenderModeChanged;
+    public event Action<double>? AudioBoostChanged;
     public event Action<bool>? ClosingRequested;
+    public event Action? DanmakuTimelineCleared;
+    public event Action<IReadOnlyList<DanmakuItem>>? DanmakuItemsLoaded;
+    public event Action<double>? DanmakuSeeked;
 
     public ObservableCollection<EpisodeOptionViewModel> Episodes { get; } = [];
     public ObservableCollection<EpisodeRowViewModel> EpisodeRows { get; } = [];
@@ -148,13 +180,18 @@ public sealed class PlayerViewModel : ReactiveObject
     public ReactiveCommand<string, RxVoid> ToggleMenuCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> CloseMenuCommand { get; }
     public ReactiveCommand<PlayerMenuOptionViewModel, RxVoid> SelectMenuOptionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleMuteCommand { get; }
+    public ReactiveCommand<string, RxVoid> SetAudioBoostCommand { get; }
 
     public bool IsAnyMenuOpen => !string.IsNullOrEmpty(_activeMenuKey);
+    public bool IsVolumeMenuOpen => _activeMenuKey == "volume";
+    public bool IsStandardOptionMenuOpen => IsAnyMenuOpen && !IsVolumeMenuOpen;
     public string ActiveMenuTitle => _activeMenuKey switch
     {
         "render" => "视频渲染方式",
         "speed" => "播放倍速",
         "quality" => "清晰度",
+        "volume" => "播放音量",
         _ => string.Empty
     };
     public ObservableCollection<PlayerMenuOptionViewModel> ActiveMenuOptions => _activeMenuKey switch
@@ -165,13 +202,19 @@ public sealed class PlayerViewModel : ReactiveObject
         _ => SpeedOptions
     };
     public ReactiveCommand<RxVoid, RxVoid> ToggleMiniModeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleDanmakuCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> ToggleMiniPinCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> RetryResolveCommand { get; }
 
     public bool IsOpen
     {
         get => _isOpen;
-        set => this.RaiseAndSetIfChanged(ref _isOpen, value);
+        set
+        {
+            if (_isOpen == value) return;
+            this.RaiseAndSetIfChanged(ref _isOpen, value);
+            RaiseDanmakuSurfaceProperties();
+        }
     }
 
     public DramaItem? CurrentDrama
@@ -283,6 +326,32 @@ public sealed class PlayerViewModel : ReactiveObject
     public bool UseDockedMiniTopBar => IsNativeSurfaceMode && ShowMiniTopBar;
     public bool UseFloatingMenu => !IsNativeSurfaceMode && IsAnyMenuOpen;
     public bool UseDockedMenu => IsNativeSurfaceMode && IsAnyMenuOpen;
+    public bool UseEmbeddedDanmakuOverlay => IsOpen && HasRealMediaUrl && IsDanmakuEnabled && !IsNativeSurfaceMode;
+    public bool UseNativeDanmakuOverlay => IsOpen && HasRealMediaUrl && IsDanmakuEnabled && IsNativeSurfaceMode;
+
+    public bool IsDanmakuEnabled
+    {
+        get => _isDanmakuEnabled;
+        set
+        {
+            if (_isDanmakuEnabled == value) return;
+            this.RaiseAndSetIfChanged(ref _isDanmakuEnabled, value);
+            _settings.Update(_settings.Current with { DanmakuEnabled = value });
+            this.RaisePropertyChanged(nameof(DanmakuTooltip));
+            RaiseDanmakuSurfaceProperties();
+            if (value)
+            {
+                EnsureDanmakuBufferedForSeconds(PositionSeconds);
+                DanmakuSeeked?.Invoke(PositionSeconds);
+            }
+        }
+    }
+
+    public int LoadedDanmakuCount => _loadedDanmakuItems.Count;
+    public string? ActiveDanmakuId => _activeDanmakuId;
+    public string DanmakuTooltip => IsDanmakuEnabled
+        ? (LoadedDanmakuCount > 0 ? $"关闭弹幕（已加载 {LoadedDanmakuCount} 条）" : "关闭弹幕")
+        : "开启弹幕";
 
     private void RaiseControlVisibilityProperties()
     {
@@ -300,6 +369,13 @@ public sealed class PlayerViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(UseDockedMiniTopBar));
         this.RaisePropertyChanged(nameof(UseFloatingMenu));
         this.RaisePropertyChanged(nameof(UseDockedMenu));
+        RaiseDanmakuSurfaceProperties();
+    }
+
+    private void RaiseDanmakuSurfaceProperties()
+    {
+        this.RaisePropertyChanged(nameof(UseEmbeddedDanmakuOverlay));
+        this.RaisePropertyChanged(nameof(UseNativeDanmakuOverlay));
     }
 
     public bool IsMiniPinned
@@ -321,7 +397,11 @@ public sealed class PlayerViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _positionSeconds, value);
             this.RaisePropertyChanged(nameof(CurrentTimeText));
             if (!_suppressSeekEvent && HasRealMediaUrl)
-                SeekRequested?.Invoke(TimeSpan.FromSeconds(Math.Clamp(value, 0, Math.Max(0, DurationSeconds))));
+            {
+                var clamped = Math.Clamp(value, 0, Math.Max(0, DurationSeconds));
+                SeekRequested?.Invoke(TimeSpan.FromSeconds(clamped));
+                NotifyDanmakuSeeked(clamped);
+            }
         }
     }
 
@@ -338,7 +418,12 @@ public sealed class PlayerViewModel : ReactiveObject
     public bool HasRealMediaUrl
     {
         get => _hasRealMediaUrl;
-        private set => this.RaiseAndSetIfChanged(ref _hasRealMediaUrl, value);
+        private set
+        {
+            if (_hasRealMediaUrl == value) return;
+            this.RaiseAndSetIfChanged(ref _hasRealMediaUrl, value);
+            RaiseDanmakuSurfaceProperties();
+        }
     }
 
     public string? ResolvedPlayUrl
@@ -372,6 +457,70 @@ public sealed class PlayerViewModel : ReactiveObject
         ? $"当前 {_selectedQuality}P" : $"优先 {_preferredQuality}P，当前片源提供 {_selectedQuality}P";
     public string SpeedLabel => SpeedPresets.FirstOrDefault(x => Math.Abs(x.Rate - _playbackRate) < 0.01).Label ?? $"{_playbackRate:0.##}x";
     public double PlaybackRate => _playbackRate;
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            var clamped = double.IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : 1.0;
+            if (clamped > 0.001) _lastNonZeroVolume = clamped;
+            if (Math.Abs(_volume - clamped) < 0.001 && (!_isMuted || clamped <= 0.001)) return;
+            _volume = clamped;
+            if (clamped > 0.001 && _isMuted) _isMuted = false;
+            SaveVolumeSettings();
+            RaiseVolumeProperties();
+        }
+    }
+
+    public double VolumePercent
+    {
+        get => _isMuted ? 0 : Math.Round(_volume * 100);
+        set
+        {
+            var clamped = double.IsFinite(value) ? Math.Clamp(value, 0.0, 100.0) : 100.0;
+            var normalized = clamped / 100.0;
+            if (normalized > 0.001)
+            {
+                _isMuted = false;
+                _lastNonZeroVolume = normalized;
+            }
+            else
+            {
+                _isMuted = true;
+            }
+            _volume = normalized > 0.001 ? normalized : _volume;
+            SaveVolumeSettings();
+            RaiseVolumeProperties();
+        }
+    }
+
+    public bool IsMuted
+    {
+        get => _isMuted;
+        set
+        {
+            if (_isMuted == value) return;
+            _isMuted = value;
+            if (!_isMuted && _volume <= 0.001)
+                _volume = _lastNonZeroVolume > 0.01 ? _lastNonZeroVolume : 0.5;
+            SaveVolumeSettings();
+            RaiseVolumeProperties();
+        }
+    }
+
+    public bool IsEffectivelyMuted => _isMuted || _volume <= 0.001;
+    public bool IsVolumeLow => !IsEffectivelyMuted && _volume < 0.5;
+    public bool IsVolumeHigh => !IsEffectivelyMuted && _volume >= 0.5;
+    public string VolumeLabel => IsEffectivelyMuted ? "静音" : $"{(int)Math.Round(_volume * 100)}%";
+    public double AudioBoostDb => _audioBoostDb;
+    public bool IsAudioBoostOff => _audioBoostDb < 1.0;
+    public bool IsAudioBoost6 => Math.Abs(_audioBoostDb - 6.0) < 0.5;
+    public bool IsAudioBoost12 => Math.Abs(_audioBoostDb - 12.0) < 0.5;
+    public bool IsAudioBoost18 => _audioBoostDb >= 17.5;
+    public string AudioBoostLabel => _audioBoostDb <= 0.1 ? "关闭" : $"+{_audioBoostDb:0} dB";
+    public string VolumeTooltip => _audioBoostDb > 0.1
+        ? $"应用内音量 {VolumeLabel} · 增强 {AudioBoostLabel}（点击调节 / 右键静音 / 滚轮增减）"
+        : $"应用内音量 {VolumeLabel}（点击调节 / 右键静音 / 滚轮增减）";
     public string QualityLabel => $"{_selectedQuality}P";
     public VideoRenderMode RenderMode => _renderMode;
     public string RenderModeLabel => RenderPresets.FirstOrDefault(x => x.Mode == _renderMode).ShortLabel ?? "自动";
@@ -383,6 +532,7 @@ public sealed class PlayerViewModel : ReactiveObject
     {
         SavePlaybackProgress();
         CancelPrefetch();
+        ResetDanmakuForEpisode(null, 0);
         HasRealMediaUrl = false;
         ReleaseActiveProxySession();
         _resolveCts?.Cancel();
@@ -460,6 +610,7 @@ public sealed class PlayerViewModel : ReactiveObject
         SavePlaybackProgress();
         CancelPrefetch();
         _resolveCts?.Cancel();
+        ResetDanmakuForEpisode(null, 0);
         CloseMenu();
         IsResolvingStream = false;
         var wasMini = IsMiniMode;
@@ -638,6 +789,7 @@ public sealed class PlayerViewModel : ReactiveObject
         ResolutionLabel = $"{StreamWidth}×{StreamHeight}";
         if (_activeProxyUri is { } previous) _retiredProxyUris.Add(previous);
         _activeProxyUri = playableUri;
+        ResetDanmakuForEpisode(ResolveDanmakuId(info), resumeAtSeconds ?? 0);
         HasRealMediaUrl = playableUri is not null;
         ResolvedPlayUrl = playableUri?.ToString();
         IsPlaying = HasRealMediaUrl;
@@ -696,10 +848,78 @@ public sealed class PlayerViewModel : ReactiveObject
     private void RaiseMenuProperties()
     {
         this.RaisePropertyChanged(nameof(IsAnyMenuOpen));
+        this.RaisePropertyChanged(nameof(IsVolumeMenuOpen));
+        this.RaisePropertyChanged(nameof(IsStandardOptionMenuOpen));
         this.RaisePropertyChanged(nameof(ActiveMenuTitle));
         this.RaisePropertyChanged(nameof(ActiveMenuOptions));
         this.RaisePropertyChanged(nameof(UseFloatingMenu));
         this.RaisePropertyChanged(nameof(UseDockedMenu));
+    }
+
+    public void ToggleMute()
+    {
+        if (IsEffectivelyMuted)
+        {
+            _isMuted = false;
+            if (_volume <= 0.001)
+                _volume = _lastNonZeroVolume > 0.01 ? _lastNonZeroVolume : 0.5;
+        }
+        else
+        {
+            _isMuted = true;
+        }
+        SaveVolumeSettings();
+        RaiseVolumeProperties();
+    }
+
+    public void StepVolume(double delta)
+    {
+        if (!double.IsFinite(delta) || Math.Abs(delta) < 0.0001) return;
+        var baseVol = IsEffectivelyMuted && delta > 0 ? 0.0 : _volume;
+        var next = Math.Clamp(Math.Round((baseVol + delta) * 100) / 100.0, 0.0, 1.0);
+        if (next > 0.001)
+        {
+            _isMuted = false;
+            _lastNonZeroVolume = next;
+            _volume = next;
+        }
+        else
+        {
+            _isMuted = true;
+        }
+        SaveVolumeSettings();
+        RaiseVolumeProperties();
+    }
+
+    private void SaveVolumeSettings() =>
+        _settings.Update(_settings.Current with { Volume = _volume, IsMuted = _isMuted, AudioBoostDb = _audioBoostDb });
+
+    public void SetAudioBoost(double db)
+    {
+        var clamped = double.IsFinite(db) ? Math.Clamp(db, 0.0, 24.0) : 0.0;
+        if (Math.Abs(_audioBoostDb - clamped) < 0.05) return;
+        _audioBoostDb = clamped;
+        SaveVolumeSettings();
+        this.RaisePropertyChanged(nameof(AudioBoostDb));
+        this.RaisePropertyChanged(nameof(IsAudioBoostOff));
+        this.RaisePropertyChanged(nameof(IsAudioBoost6));
+        this.RaisePropertyChanged(nameof(IsAudioBoost12));
+        this.RaisePropertyChanged(nameof(IsAudioBoost18));
+        this.RaisePropertyChanged(nameof(AudioBoostLabel));
+        this.RaisePropertyChanged(nameof(VolumeTooltip));
+        AudioBoostChanged?.Invoke(_audioBoostDb);
+    }
+
+    private void RaiseVolumeProperties()
+    {
+        this.RaisePropertyChanged(nameof(Volume));
+        this.RaisePropertyChanged(nameof(VolumePercent));
+        this.RaisePropertyChanged(nameof(IsMuted));
+        this.RaisePropertyChanged(nameof(IsEffectivelyMuted));
+        this.RaisePropertyChanged(nameof(IsVolumeLow));
+        this.RaisePropertyChanged(nameof(IsVolumeHigh));
+        this.RaisePropertyChanged(nameof(VolumeLabel));
+        this.RaisePropertyChanged(nameof(VolumeTooltip));
     }
 
     private void SelectSpeed(PlayerMenuOptionViewModel? option)
@@ -925,6 +1145,146 @@ public sealed class PlayerViewModel : ReactiveObject
         }
         if (_pendingResumeSeconds is null && Environment.TickCount64 - _lastHistorySaveTick >= 5_000)
             SavePlaybackProgress();
+        if (IsDanmakuEnabled && _activeDanmakuId is not null)
+            EnsureDanmakuBufferedForSeconds(position.TotalSeconds);
+    }
+
+    public void NotifyDanmakuSeeked(double positionSeconds)
+    {
+        EnsureDanmakuBufferedForSeconds(positionSeconds);
+        DanmakuSeeked?.Invoke(Math.Max(0, positionSeconds));
+    }
+
+    public IReadOnlyList<DanmakuItem> GetLoadedDanmakuSnapshot() => [.. _loadedDanmakuItems];
+
+    private string? ResolveDanmakuId(ResolvedStreamInfo info)
+    {
+        if (!string.IsNullOrWhiteSpace(info.DanmakuId))
+            return info.DanmakuId.Trim();
+
+        var ep = Episodes.FirstOrDefault(x => x.No == info.EpisodeNo);
+        var vid = ep?.Episode.Vid;
+        if (!string.IsNullOrWhiteSpace(vid)
+            && IsAsciiDigits(info.SeriesId)
+            && IsAsciiDigits(vid)
+            && vid.Length is >= 10 and <= 30)
+        {
+            return $"hongguo:{info.SeriesId}:{vid}";
+        }
+
+        return null;
+    }
+
+    private static bool IsAsciiDigits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        foreach (var ch in value)
+        {
+            if (ch is < '0' or > '9') return false;
+        }
+        return true;
+    }
+
+    private void ResetDanmakuForEpisode(string? danmakuId, double initialSeconds)
+    {
+        _danmakuCts?.Cancel();
+        _danmakuCts?.Dispose();
+        _danmakuCts = danmakuId is null ? null : new CancellationTokenSource();
+        _activeDanmakuId = danmakuId;
+        _fetchedDanmakuChunks.Clear();
+        _inFlightDanmakuChunks.Clear();
+        _seenDanmakuItemIds.Clear();
+        _loadedDanmakuItems.Clear();
+        _danmakuEndMs = null;
+        this.RaisePropertyChanged(nameof(LoadedDanmakuCount));
+        this.RaisePropertyChanged(nameof(ActiveDanmakuId));
+        this.RaisePropertyChanged(nameof(DanmakuTooltip));
+        DanmakuTimelineCleared?.Invoke();
+
+        if (danmakuId is not null && IsDanmakuEnabled)
+            EnsureDanmakuBufferedForSeconds(initialSeconds);
+    }
+
+    private void EnsureDanmakuBufferedForSeconds(double seconds)
+    {
+        if (!IsDanmakuEnabled || _activeDanmakuId is not { } danmakuId || _danmakuCts is not { } cts)
+            return;
+
+        var posMs = Math.Max(0L, (long)(seconds * 1000.0));
+        var chunkStartMs = (posMs / 30_000L) * 30_000L;
+        ScheduleDanmakuChunkFetch(danmakuId, chunkStartMs, cts);
+
+        // Prefetch the next 30s segment once playback enters the last 10s of the active chunk.
+        if (posMs - chunkStartMs >= 20_000L)
+        {
+            var nextChunkMs = chunkStartMs + 30_000L;
+            var knownDurMs = (long)(DurationSeconds * 1000.0);
+            if (knownDurMs <= 0 || nextChunkMs < knownDurMs)
+                ScheduleDanmakuChunkFetch(danmakuId, nextChunkMs, cts);
+        }
+    }
+
+    private void ScheduleDanmakuChunkFetch(string danmakuId, long chunkStartMs, CancellationTokenSource cts)
+    {
+        if (_danmakuEndMs is { } endMs && chunkStartMs >= endMs)
+            return;
+        if (_fetchedDanmakuChunks.Contains(chunkStartMs) || !_inFlightDanmakuChunks.Add(chunkStartMs))
+            return;
+
+        var knownDurMs = DurationSeconds > 1.0 ? (long)Math.Ceiling(DurationSeconds * 1000.0) : 300_000L;
+        var durationMs = Math.Clamp(Math.Max(knownDurMs, chunkStartMs + 30_000L), 30_000L, 86_400_000L);
+        _ = FetchDanmakuChunkAsync(danmakuId, chunkStartMs, durationMs, cts.Token);
+    }
+
+    private async Task FetchDanmakuChunkAsync(string danmakuId, long startMs, long durationMs, CancellationToken ct)
+    {
+        try
+        {
+            var chunk = await _catalog.GetDanmakuAsync(danmakuId, startMs, durationMs, ct);
+            if (ct.IsCancellationRequested || !string.Equals(_activeDanmakuId, danmakuId, StringComparison.Ordinal))
+                return;
+
+            _fetchedDanmakuChunks.Add(startMs);
+            if (chunk.NextMs <= chunk.StartMs)
+                _danmakuEndMs = chunk.StartMs + 30_000L;
+
+            if (chunk.Items.Count > 0)
+            {
+                var added = new List<DanmakuItem>(chunk.Items.Count);
+                foreach (var item in chunk.Items)
+                {
+                    if (string.IsNullOrWhiteSpace(item.Text)) continue;
+                    var dedupeKey = string.IsNullOrWhiteSpace(item.Id)
+                        ? $"{item.TimeMs}:{item.Text}"
+                        : item.Id;
+                    if (_seenDanmakuItemIds.Add(dedupeKey))
+                    {
+                        _loadedDanmakuItems.Add(item);
+                        added.Add(item);
+                    }
+                }
+
+                if (added.Count > 0)
+                {
+                    _loadedDanmakuItems.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
+                    this.RaisePropertyChanged(nameof(LoadedDanmakuCount));
+                    this.RaisePropertyChanged(nameof(DanmakuTooltip));
+                    DanmakuItemsLoaded?.Invoke(added);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by episode switch or close.
+        }
+        catch
+        {
+            // Danmaku failures must stay silent so they never disrupt video playback.
+        }
+        finally
+        {
+            _inFlightDanmakuChunks.Remove(startMs);
+        }
     }
 
     private void SavePlaybackProgress()

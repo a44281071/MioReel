@@ -128,6 +128,64 @@ try
     Check(!player.ShowMiniTopBar && !player.ShowTransportControls, "小窗允许切换隐藏全部功能栏");
     player.Close();
 
+    var volSettingsPath = Path.Combine(root, "vol-settings.json");
+    File.WriteAllText(volSettingsPath, """{"Theme":0,"MiniWindowAlwaysOnTop":true,"DefaultQuality":1080,"AutoPlayNextEpisode":true,"DownloadDirectory":"","GatewayBaseUrl":"https://example.invalid"}""");
+    var volSettings = new FileSettingsService(volSettingsPath);
+    Check(volSettings.Current.Volume == 1.0 && !volSettings.Current.IsMuted, "旧版设置文件默认恢复100%非静音应用内音量");
+    Check(volSettings.Current.DanmakuEnabled == true, "旧版设置文件默认开启弹幕显示");
+    var volPlayer = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), volSettings, DispatchProxy.Create<IToastService, NoopProxy>());
+    volPlayer.VolumePercent = 42;
+    Check(Math.Abs(volPlayer.Volume - 0.42) < 0.001 && volPlayer.IsVolumeLow && !volPlayer.IsEffectivelyMuted && volPlayer.VolumeLabel == "42%", "音量滑块百分比调节同步状态与图标档位");
+    volPlayer.ToggleMute();
+    Check(volPlayer.IsMuted && volPlayer.IsEffectivelyMuted && volPlayer.VolumePercent == 0 && volPlayer.VolumeLabel == "静音", "静音时保留原音量并显示静音状态");
+    volPlayer.ToggleMute();
+    Check(!volPlayer.IsMuted && Math.Abs(volPlayer.Volume - 0.42) < 0.001 && volPlayer.VolumePercent == 42, "取消静音后恢复调节前的音量");
+    volPlayer.StepVolume(0.1);
+    Check(Math.Abs(volPlayer.Volume - 0.52) < 0.001 && volPlayer.IsVolumeHigh, "步进增大音量切换到高音量图标并持久化");
+    var boostChangedTo = -1.0;
+    volPlayer.AudioBoostChanged += db => boostChangedTo = db;
+    await volPlayer.SetAudioBoostCommand.Execute("18").ToTask();
+    Check(Math.Abs(volPlayer.AudioBoostDb - 18.0) < 0.01 && volPlayer.IsAudioBoost18 && Math.Abs(boostChangedTo - 18.0) < 0.01, "音量增强支持切换+18dB并触发增益重载事件");
+    await volPlayer.ToggleDanmakuCommand.Execute().ToTask();
+    Check(!volPlayer.IsDanmakuEnabled, "切换弹幕开关可关闭弹幕");
+    var reloadedSettings = new FileSettingsService(volSettingsPath);
+    Check(Math.Abs((reloadedSettings.Current.Volume ?? 0) - 0.52) < 0.001 && !reloadedSettings.Current.IsMuted && Math.Abs(reloadedSettings.Current.AudioBoostDb - 18.0) < 0.01 && reloadedSettings.Current.DanmakuEnabled == false, "重启后保留应用内音量、增强增益与弹幕开关设置");
+
+    await using (var mockGateway = new DanmakuGatewayServer())
+    {
+        var gwSettings = new InMemorySettingsService();
+        gwSettings.Update(gwSettings.Current with { GatewayBaseUrl = mockGateway.BaseUrl, GatewayToken = "secret-token", DanmakuEnabled = true });
+        using var dmHttp = new HttpClient();
+        var gwCatalog = new GatewayDramaCatalogService(dmHttp, gwSettings);
+        var resolvedGw = await gwCatalog.ResolveEpisodeAsync("7701678491724418073", 1, 1080);
+        Check(resolvedGw.DanmakuId == "hongguo:7701678491724418073:7701680675979545625", "resolve 接口正确解析 danmaku_id");
+
+        var chunkHigh = await gwCatalog.GetDanmakuAsync(resolvedGw.DanmakuId!, 310_000, 300_000);
+        Check(chunkHigh.Items.Count == 1 && mockGateway.LastDurationMs > 310_000 && mockGateway.LastAuthHeader == "Bearer secret-token", "danmaku 接口携带鉴权且自动扩展 duration_ms 大于 start_ms");
+
+        var dmCatalog = new FakeCatalog
+        {
+            Transform = info => info with { DanmakuId = $"hongguo:7701678491724418073:77016806759795456{info.EpisodeNo:00}" },
+            DanmakuHandler = (id, start, dur) => gwCatalog.GetDanmakuAsync(id, start, dur)
+        };
+        var dmPlayer = new PlayerViewModel(dmCatalog, proxy, new InMemoryHistoryService(), gwSettings, DispatchProxy.Create<IToastService, NoopProxy>());
+        var loadedBatches = new List<int>();
+        dmPlayer.DanmakuItemsLoaded += batch => loadedBatches.Add(batch.Count);
+        await dmPlayer.OpenAsync(new DramaCardViewModel(drama, "dm"));
+        await Task.Delay(80);
+        Check(dmPlayer.UseEmbeddedDanmakuOverlay && dmPlayer.LoadedDanmakuCount == 2 && dmCatalog.DanmakuStarts.Contains(0), "开播后自动拉取首段 30 秒弹幕并激活弹幕层");
+        dmPlayer.SyncFromPlayer(TimeSpan.FromSeconds(22), TimeSpan.FromSeconds(120));
+        await Task.Delay(80);
+        Check(dmCatalog.DanmakuStarts.Contains(30_000) && dmPlayer.LoadedDanmakuCount == 3, "播放接近片段末尾时自动预加载下一段弹幕");
+        var seekNotified = -1.0;
+        dmPlayer.DanmakuSeeked += s => seekNotified = s;
+        dmPlayer.NotifyDanmakuSeeked(95);
+        await Task.Delay(80);
+        Check(Math.Abs(seekNotified - 95) < 0.01 && dmCatalog.DanmakuStarts.Contains(90_000), "拖拽进度后通知弹幕重置并拉取对应时间段弹幕");
+        dmPlayer.Close();
+        Check(dmPlayer.LoadedDanmakuCount == 0 && !dmPlayer.UseEmbeddedDanmakuOverlay, "关闭播放器后清空弹幕缓存并隐藏弹幕层");
+    }
+
     catalog = new FakeCatalog { DelayEpisode = 2 };
     proxy = new FakeProxy();
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
@@ -214,7 +272,9 @@ sealed class FakeCatalog : IDramaCatalogService
 {
     public List<int> Resolved { get; } = [];
     public List<int> RequestedQualities { get; } = [];
+    public List<long> DanmakuStarts { get; } = [];
     public Func<ResolvedStreamInfo, ResolvedStreamInfo>? Transform { get; init; }
+    public Func<string, long, long, Task<DanmakuChunk>>? DanmakuHandler { get; init; }
     public int FailEpisode { get; set; }
     public int DelayEpisode { get; set; }
     public TaskCompletionSource Delayed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -230,10 +290,92 @@ sealed class FakeCatalog : IDramaCatalogService
         var info = new ResolvedStreamInfo(seriesId, episodeNo, "https://example.invalid/video.mp4", new Dictionary<string, string>(), "", "none", quality, 720, 1280, "h264", DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds());
         return Transform?.Invoke(info) ?? info;
     }
+    public Task<DanmakuChunk> GetDanmakuAsync(string danmakuId, long startMs = 0, long durationMs = 300_000, CancellationToken ct = default)
+    {
+        DanmakuStarts.Add(startMs);
+        return DanmakuHandler is not null
+            ? DanmakuHandler(danmakuId, startMs, durationMs)
+            : Task.FromResult(new DanmakuChunk(danmakuId, startMs, startMs + 30_000, []));
+    }
     public Task<CatalogPageResult> GetCatalogPageAsync(DramaCategory category, int page = 1, int limit = 40, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<DramaItem>> GetCatalogAsync(DramaCategory category, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<GatewayHealthResult> TestConnectionAsync(string gatewayBaseUrl, CancellationToken ct = default) => throw new NotSupportedException();
+}
+
+sealed class DanmakuGatewayServer : IAsyncDisposable
+{
+    private readonly HttpListener _listener = new();
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Task _loop;
+    public string BaseUrl { get; }
+    public string? LastAuthHeader { get; private set; }
+    public long LastDurationMs { get; private set; }
+
+    public DanmakuGatewayServer()
+    {
+        using var sock = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        sock.Start();
+        var port = ((System.Net.IPEndPoint)sock.LocalEndpoint).Port;
+        sock.Stop();
+        BaseUrl = $"http://127.0.0.1:{port}";
+        _listener.Prefixes.Add(BaseUrl + "/");
+        _listener.Start();
+        _loop = Task.Run(ServeAsync);
+    }
+
+    private async Task ServeAsync()
+    {
+        while (!_cts.IsCancellationRequested)
+        {
+            HttpListenerContext ctx;
+            try { ctx = await _listener.GetContextAsync(); }
+            catch { break; }
+            LastAuthHeader = ctx.Request.Headers["Authorization"];
+            var path = ctx.Request.Url?.AbsolutePath ?? "";
+            string body;
+            if (path == "/api/v1/resolve")
+            {
+                body = """{"code":0,"message":"ok","request_id":"req-1","data":{"series_id":"7701678491724418073","series_title":"测试短剧","episode_no":1,"play_url":"https://example.invalid/ep1.mp4","play_headers":{},"decryption_key":"","encryption":"none","quality":1080,"width":720,"height":1280,"codec":"h264","expires_at":4102444800000,"variants":[],"danmaku_id":"hongguo:7701678491724418073:7701680675979545625"}}""";
+            }
+            else if (path == "/api/v1/danmaku")
+            {
+                var q = ctx.Request.QueryString;
+                long.TryParse(q["start_ms"], out var startMs);
+                long.TryParse(q["duration_ms"], out var durMs);
+                LastDurationMs = durMs;
+                var episodeId = q["danmaku_id"] ?? "";
+                body = (startMs switch
+                {
+                    0 => """{"code":0,"message":"ok","request_id":"req-2","data":{"episode_id":"__EP__","start_ms":0,"next_ms":30000,"items":[{"id":"dm-1","time_ms":1200,"text":"前排打卡","color":"#FFFFFF"},{"id":"dm-2","time_ms":4500,"text":"高能预警","color":"#FB7185"}]}}""",
+                    30_000 => """{"code":0,"message":"ok","request_id":"req-3","data":{"episode_id":"__EP__","start_ms":30000,"next_ms":60000,"items":[{"id":"dm-3","time_ms":32500,"text":"太上头了","color":"#FBBF24"}]}}""",
+                    _ => """{"code":0,"message":"ok","request_id":"req-4","data":{"episode_id":"__EP__","start_ms":__START__,"next_ms":__NEXT__,"items":[{"id":"dm-4","time_ms":__ITEM_TIME__,"text":"高能名场面","color":"#FFFFFF"}]}}"""
+                })
+                .Replace("__EP__", episodeId, StringComparison.Ordinal)
+                .Replace("__START__", startMs.ToString(), StringComparison.Ordinal)
+                .Replace("__NEXT__", (startMs + 30_000).ToString(), StringComparison.Ordinal)
+                .Replace("__ITEM_TIME__", (startMs + 1000).ToString(), StringComparison.Ordinal);
+            }
+            else
+            {
+                body = """{"code":40401,"message":"not found","request_id":"req-404","data":null}""";
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength64 = bytes.Length;
+            await ctx.Response.OutputStream.WriteAsync(bytes);
+            ctx.Response.Close();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _listener.Stop();
+        try { await _loop; } catch { }
+        _cts.Dispose();
+    }
 }
 
 sealed class FakeProxy : IMediaStreamProxyService

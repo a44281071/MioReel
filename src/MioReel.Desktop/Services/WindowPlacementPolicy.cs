@@ -5,7 +5,7 @@ namespace MioReel.Desktop.Services;
 
 public static class WindowPlacementPolicy
 {
-    public const double MiniMinWidth = 260;
+    public const double MiniMinWidth = 288;
     public const double MiniMinHeight = 160;
     public const double NormalMinWidth = 340;
     public const double NormalMinHeight = 280;

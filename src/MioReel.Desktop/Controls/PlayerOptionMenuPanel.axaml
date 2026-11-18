@@ -18,7 +18,8 @@
                  Foreground="{DynamicResource TextMutedBrush}" />
       <ScrollViewer MaxHeight="260"
                     HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto">
+                    VerticalScrollBarVisibility="Auto"
+                    IsVisible="{Binding IsStandardOptionMenuOpen}">
         <ItemsControl ItemsSource="{Binding ActiveMenuOptions}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:PlayerMenuOptionViewModel">
@@ -39,6 +40,82 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
+      <StackPanel Spacing="10"
+                  Margin="8,4,10,6"
+                  Background="Transparent"
+                  PointerWheelChanged="OnVolumePanelPointerWheelChanged"
+                  IsVisible="{Binding IsVolumeMenuOpen}">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+          <Button Classes="player-hud-btn"
+                  Classes.active="{Binding IsEffectivelyMuted}"
+                  AutomationProperties.Name="静音或取消静音"
+                  ToolTip.Tip="静音 / 取消静音"
+                  Width="28" Height="28"
+                  Command="{Binding ToggleMuteCommand}">
+            <Grid>
+              <PathIcon Data="{StaticResource IconVolumeMute}" Width="14" Height="14" IsVisible="{Binding IsEffectivelyMuted}" />
+              <PathIcon Data="{StaticResource IconVolumeLow}" Width="14" Height="14" IsVisible="{Binding IsVolumeLow}" />
+              <PathIcon Data="{StaticResource IconVolumeHigh}" Width="14" Height="14" IsVisible="{Binding IsVolumeHigh}" />
+            </Grid>
+          </Button>
+          <Slider Grid.Column="1"
+                  Classes="player-seek"
+                  Width="122"
+                  Minimum="0"
+                  Maximum="100"
+                  Value="{Binding VolumePercent, Mode=TwoWay}"
+                  VerticalAlignment="Center" />
+          <TextBlock Grid.Column="2"
+                     MinWidth="34"
+                     TextAlignment="Right"
+                     Text="{Binding VolumeLabel}"
+                     FontSize="{DynamicResource AppMinFontSize}"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="音量增强"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding AudioBoostLabel}"
+                       FontSize="{DynamicResource AppMinFontSize}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource AccentRoseBrush}" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding IsAudioBoostOff}"
+                    Padding="9,4"
+                    Content="关闭"
+                    Command="{Binding SetAudioBoostCommand}"
+                    CommandParameter="0" />
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding IsAudioBoost6}"
+                    Padding="9,4"
+                    Content="+6dB"
+                    Command="{Binding SetAudioBoostCommand}"
+                    CommandParameter="6" />
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding IsAudioBoost12}"
+                    Padding="9,4"
+                    Content="+12dB"
+                    Command="{Binding SetAudioBoostCommand}"
+                    CommandParameter="12" />
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding IsAudioBoost18}"
+                    Padding="9,4"
+                    Content="+18dB"
+                    Command="{Binding SetAudioBoostCommand}"
+                    CommandParameter="18" />
+          </StackPanel>
+        </StackPanel>
+      </StackPanel>
     </StackPanel>
   </Grid>
 </UserControl>

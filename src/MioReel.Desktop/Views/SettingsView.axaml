@@ -104,6 +104,57 @@
                         OffContent="关" />
         </Grid>
 
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2">
+            <TextBlock Text="播放时显示弹幕" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="从视频源拉取分集实时弹幕并在画面上方飘动" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <ToggleSwitch Grid.Column="1"
+                        AutomationProperties.Name="播放时显示弹幕"
+                        IsChecked="{Binding Player.IsDanmakuEnabled, Mode=TwoWay}"
+                        OnContent="开"
+                        OffContent="关" />
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="应用内音量" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="仅调节客户端播放音量，不改动系统音量" FontSize="{DynamicResource AppMinFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button Classes="pill-btn"
+                    Classes.active="{Binding Player.IsEffectivelyMuted}"
+                    Padding="10,5"
+                    Content="{Binding Player.VolumeLabel}"
+                    Command="{Binding Player.ToggleMuteCommand}" />
+            <Slider Classes="player-seek"
+                    Width="150"
+                    Minimum="0"
+                    Maximum="100"
+                    Value="{Binding Player.VolumePercent, Mode=TwoWay}"
+                    VerticalAlignment="Center" />
+          </StackPanel>
+        </Grid>
+
+        <Separator Background="{DynamicResource BorderSubtleBrush}" Height="1" />
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="音量增强" FontSize="{DynamicResource AppMinFontSize}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="放大低音量片源的音频增益（最高 +18 dB），切换后立即作用于当前播放" FontSize="{DynamicResource AppMinFontSize}" TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="pill-btn" Classes.active="{Binding Player.IsAudioBoostOff}" Content="关闭" Command="{Binding Player.SetAudioBoostCommand}" CommandParameter="0" />
+            <Button Classes="pill-btn" Classes.active="{Binding Player.IsAudioBoost6}" Content="+6 dB" Command="{Binding Player.SetAudioBoostCommand}" CommandParameter="6" />
+            <Button Classes="pill-btn" Classes.active="{Binding Player.IsAudioBoost12}" Content="+12 dB" Command="{Binding Player.SetAudioBoostCommand}" CommandParameter="12" />
+            <Button Classes="pill-btn" Classes.active="{Binding Player.IsAudioBoost18}" Content="+18 dB" Command="{Binding Player.SetAudioBoostCommand}" CommandParameter="18" />
+          </StackPanel>
+        </Grid>
+
       </StackPanel>
     </aviora:AvioraCard>
 

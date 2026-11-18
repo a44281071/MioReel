@@ -17,7 +17,7 @@
         </LinearGradientBrush>
       </aviora:BackdropBlur.Background>
     </aviora:BackdropBlur>
-    <StackPanel Margin="10,8" Spacing="6">
+    <StackPanel Margin="9,7" Spacing="6">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
         <TextBlock Text="{Binding CurrentTimeText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="#E2E8F0" VerticalAlignment="Center" />
         <Slider Grid.Column="1"
@@ -30,53 +30,79 @@
       </Grid>
 
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Orientation="Horizontal" Spacing="5">
+        <StackPanel Orientation="Horizontal" Spacing="4">
           <Button AutomationProperties.Name="上一集"
                   ToolTip.Tip="上一集（Page Up）"
                   Classes="player-hud-btn"
-                  Width="28" Height="28"
+                  Width="26" Height="26"
                   IsEnabled="{Binding HasPreviousEpisode}"
                   Command="{Binding PreviousEpisodeCommand}">
-            <PathIcon Data="{StaticResource IconPrevEpisode}" Width="14" Height="14" />
+            <PathIcon Data="{StaticResource IconPrevEpisode}" Width="13" Height="13" />
           </Button>
           <Button x:Name="PlayerPlayPauseBtn"
                   AutomationProperties.Name="播放或暂停"
                   Classes="brand-cta"
-                  Width="32"
-                  Height="28"
+                  Width="30"
+                  Height="26"
                   Padding="0"
-                  CornerRadius="9"
+                  CornerRadius="8"
                   Command="{Binding TogglePlayPauseCommand}">
             <Grid>
-              <PathIcon Data="{StaticResource IconPause}" Width="13" Height="13" Foreground="#FFFFFF" IsVisible="{Binding IsPlaying}" />
-              <PathIcon Data="{StaticResource IconPlay}" Width="13" Height="13" Foreground="#FFFFFF" IsVisible="{Binding !IsPlaying}" />
+              <PathIcon Data="{StaticResource IconPause}" Width="12" Height="12" Foreground="#FFFFFF" IsVisible="{Binding IsPlaying}" />
+              <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="#FFFFFF" IsVisible="{Binding !IsPlaying}" />
             </Grid>
           </Button>
           <Button Classes="player-hud-btn"
                   AutomationProperties.Name="下一集"
                   ToolTip.Tip="下一集（Page Down）"
-                  Width="28" Height="28"
+                  Width="26" Height="26"
                   IsEnabled="{Binding HasNextEpisode}"
                   Command="{Binding NextEpisodeCommand}">
-            <PathIcon Data="{StaticResource IconNextEpisode}" Width="14" Height="14" />
+            <PathIcon Data="{StaticResource IconNextEpisode}" Width="13" Height="13" />
           </Button>
         </StackPanel>
 
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+          <Button x:Name="DanmakuBtn"
+                  AutomationProperties.Name="开启或关闭弹幕"
+                  Classes="player-hud-btn"
+                  Classes.active="{Binding IsDanmakuEnabled}"
+                  ToolTip.Tip="{Binding DanmakuTooltip}"
+                  Width="26" Height="26"
+                  Command="{Binding ToggleDanmakuCommand}">
+            <PathIcon Data="{StaticResource IconDanmaku}" Width="14" Height="14" />
+          </Button>
+          <Button x:Name="VolumeBtn"
+                  AutomationProperties.Name="调节应用内音量"
+                  Classes="player-hud-btn"
+                  Classes.active="{Binding IsEffectivelyMuted}"
+                  ToolTip.Tip="{Binding VolumeTooltip}"
+                  Width="26" Height="26"
+                  Command="{Binding ToggleMenuCommand}"
+                  CommandParameter="volume"
+                  PointerPressed="OnVolumeBtnPointerPressed"
+                  PointerWheelChanged="OnVolumeBtnPointerWheelChanged">
+            <Grid>
+              <PathIcon Data="{StaticResource IconVolumeMute}" Width="14" Height="14" IsVisible="{Binding IsEffectivelyMuted}" />
+              <PathIcon Data="{StaticResource IconVolumeLow}" Width="14" Height="14" IsVisible="{Binding IsVolumeLow}" />
+              <PathIcon Data="{StaticResource IconVolumeHigh}" Width="14" Height="14" IsVisible="{Binding IsVolumeHigh}" />
+            </Grid>
+          </Button>
           <Button x:Name="RenderModeBtn"
                   AutomationProperties.Name="切换渲染方式"
                   Classes="player-hud-btn"
                   ToolTip.Tip="{Binding RenderModeLabel}"
-                  Width="28" Height="28"
+                  IsVisible="{Binding !IsMiniMode}"
+                  Width="26" Height="26"
                   Command="{Binding ToggleMenuCommand}"
                   CommandParameter="render">
-            <PathIcon Data="{StaticResource IconRenderMode}" Width="15" Height="15" />
+            <PathIcon Data="{StaticResource IconRenderMode}" Width="14" Height="14" />
           </Button>
           <Button x:Name="SpeedSelectBtn"
                   AutomationProperties.Name="选择倍速"
                   Classes="player-hud-btn"
                   ToolTip.Tip="选择倍速"
-                  Padding="8,0" Height="28"
+                  Padding="6,0" Height="26"
                   HorizontalContentAlignment="Center"
                   VerticalContentAlignment="Center"
                   FontWeight="SemiBold"
@@ -87,7 +113,7 @@
                   AutomationProperties.Name="选择清晰度"
                   Classes="player-hud-btn"
                   ToolTip.Tip="{Binding QualityPreferenceText}"
-                  Padding="8,0" Height="28"
+                  Padding="6,0" Height="26"
                   HorizontalContentAlignment="Center"
                   VerticalContentAlignment="Center"
                   FontWeight="SemiBold"

@@ -10,6 +10,8 @@ public interface IDramaCatalogService
     Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default);
     Task<IReadOnlyList<EpisodeItem>> GetEpisodesAsync(string seriesId, CancellationToken ct = default);
     Task<ResolvedStreamInfo> ResolveEpisodeAsync(string seriesId, int episodeNo, int quality = 1080, CancellationToken ct = default);
+    Task<DanmakuChunk> GetDanmakuAsync(string danmakuId, long startMs = 0, long durationMs = 300_000, CancellationToken ct = default) =>
+        Task.FromResult(new DanmakuChunk(danmakuId, startMs, startMs + 30_000, []));
     Task<GatewayHealthResult> TestConnectionAsync(string gatewayBaseUrl, CancellationToken ct = default);
 }
 

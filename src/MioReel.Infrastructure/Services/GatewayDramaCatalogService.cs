@@ -174,7 +174,47 @@ public sealed class GatewayDramaCatalogService : IDramaCatalogService
             Height: data.Height,
             Codec: data.Codec,
             ExpiresAtUnixMs: data.ExpiresAt,
-            Variants: variants);
+            Variants: variants,
+            DanmakuId: string.IsNullOrWhiteSpace(data.DanmakuId) ? null : data.DanmakuId.Trim());
+    }
+
+    public async Task<DanmakuChunk> GetDanmakuAsync(
+        string danmakuId,
+        long startMs = 0,
+        long durationMs = 300_000,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(danmakuId))
+            return new DanmakuChunk(string.Empty, 0, 30_000, []);
+
+        var trimmedId = danmakuId.Trim();
+        var safeStartMs = Math.Max(0L, startMs);
+        var safeDurationMs = Math.Clamp(Math.Max(durationMs, safeStartMs + 30_000L), 30_000L, 86_400_000L);
+        var path = $"/api/v1/danmaku?danmaku_id={Uri.EscapeDataString(trimmedId)}&start_ms={safeStartMs}&duration_ms={safeDurationMs}";
+
+        var data = await SendEnvelopeAsync(
+            HttpMethod.Get,
+            path,
+            MioReelJsonContext.Default.GatewayEnvelopeGatewayDanmakuData,
+            content: null,
+            ct);
+
+        IsLastRequestLive = true;
+        var items = (data.Items ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item.Text))
+            .Select(item => new DanmakuItem(
+                Id: item.Id ?? string.Empty,
+                TimeMs: Math.Max(0L, item.TimeMs),
+                Text: item.Text.Trim(),
+                ColorHex: string.IsNullOrWhiteSpace(item.Color) ? "#FFFFFF" : item.Color.Trim()))
+            .OrderBy(item => item.TimeMs)
+            .ToList();
+
+        return new DanmakuChunk(
+            EpisodeId: string.IsNullOrWhiteSpace(data.EpisodeId) ? trimmedId : data.EpisodeId,
+            StartMs: data.StartMs,
+            NextMs: data.NextMs > data.StartMs ? data.NextMs : data.StartMs + 30_000L,
+            Items: items);
     }
 
     public async Task<GatewayHealthResult> TestConnectionAsync(string gatewayBaseUrl, CancellationToken ct = default)

@@ -70,10 +70,29 @@ public sealed record ResolvedStreamInfo(
     int Height,
     string Codec,
     long ExpiresAtUnixMs,
-    IReadOnlyList<StreamVariantInfo>? Variants = null)
+    IReadOnlyList<StreamVariantInfo>? Variants = null,
+    string? DanmakuId = null)
 {
     public bool IsLandscape => Width > Height && Height > 0;
 }
+
+/// <summary>
+/// 单条弹幕条目（相对剧集起点的毫秒偏移、文本与颜色）。
+/// </summary>
+public sealed record DanmakuItem(
+    string Id,
+    long TimeMs,
+    string Text,
+    string ColorHex = "#FFFFFF");
+
+/// <summary>
+/// 网关返回的一段 30 秒弹幕片段。
+/// </summary>
+public sealed record DanmakuChunk(
+    string EpisodeId,
+    long StartMs,
+    long NextMs,
+    IReadOnlyList<DanmakuItem> Items);
 
 /// <summary>
 /// 浏览历史条目。
@@ -199,6 +218,10 @@ public sealed record AppSettings(
     WindowPlacement? NormalWindow = null,
     WindowPlacement? MiniWindow = null,
     double PlaybackRate = 1.0,
-    HotkeySettings? Hotkeys = null);
+    HotkeySettings? Hotkeys = null,
+    double? Volume = null,
+    bool IsMuted = false,
+    double AudioBoostDb = 0.0,
+    bool? DanmakuEnabled = null);
 
 public sealed record WindowPlacement(int X, int Y, double Width, double Height, bool IsMaximized = false);

@@ -515,6 +515,10 @@
                                               AutoPlay="True"
                                               IsVisible="{Binding Player.HasRealMediaUrl}" />
 
+                                <!-- Floating Danmaku Overlay (Non-NativeSurface) -->
+                                <controls:DanmakuOverlay x:Name="EmbeddedDanmakuOverlay"
+                                                         IsVisible="{Binding Player.UseEmbeddedDanmakuOverlay}" />
+
                                 <!-- Floating Mini Top Bar (Non-NativeSurface) -->
                                 <controls:PlayerMiniTopBar x:Name="FloatingMiniTopBar"
                                                            VerticalAlignment="Top"

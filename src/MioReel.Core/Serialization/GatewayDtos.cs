@@ -83,13 +83,27 @@ public sealed record GatewayResolveData(
     [property: JsonPropertyName("height")] int Height,
     [property: JsonPropertyName("codec")] string Codec,
     [property: JsonPropertyName("expires_at")] long ExpiresAt,
-    [property: JsonPropertyName("variants")] IReadOnlyList<GatewayResolveVariant>? Variants = null);
+    [property: JsonPropertyName("variants")] IReadOnlyList<GatewayResolveVariant>? Variants = null,
+    [property: JsonPropertyName("danmaku_id")] string? DanmakuId = null);
+
+public sealed record GatewayDanmakuData(
+    [property: JsonPropertyName("episode_id")] string EpisodeId,
+    [property: JsonPropertyName("start_ms")] long StartMs,
+    [property: JsonPropertyName("next_ms")] long NextMs,
+    [property: JsonPropertyName("items")] IReadOnlyList<GatewayDanmakuItem>? Items = null);
+
+public sealed record GatewayDanmakuItem(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("time_ms")] long TimeMs,
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("color")] string? Color = null);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(GatewayEnvelope<GatewayCatalogData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewaySearchData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewaySeriesData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewayResolveData>))]
+[JsonSerializable(typeof(GatewayEnvelope<GatewayDanmakuData>))]
 [JsonSerializable(typeof(GatewayHealthResponse))]
 [JsonSerializable(typeof(GatewaySeriesRequest))]
 [JsonSerializable(typeof(GatewayResolveRequest))]

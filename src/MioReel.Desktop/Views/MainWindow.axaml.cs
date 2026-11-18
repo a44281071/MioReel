@@ -10,6 +10,7 @@ using FrameFlux.FFmpeg;
 using Microsoft.Extensions.DependencyInjection;
 using MioReel.Core.Abstractions;
 using MioReel.Core.Models;
+using MioReel.Desktop.Controls;
 using MioReel.Desktop.Services;
 using MioReel.Desktop.Services.Hotkeys;
 using MioReel.Desktop.ViewModels;
@@ -43,6 +44,12 @@ public partial class MainWindow : Window
     private bool _isInWin32SizeMove;
     private bool _hasOpenedOnce;
     private bool _pausedByBossKey;
+    private bool _wasNativeLeftMouseDown;
+    private bool _isDockedMenuPointerCaptured;
+    private DanmakuNativeOverlayWindow? _nativeDanmakuWindow;
+    private CancellationTokenSource? _reloadOptionsCts;
+    private double? _pendingOptionsReloadResumePos;
+    private bool? _pendingOptionsReloadWasPlaying;
     private bool? _appliedSplitMiniMode;
     private WindowLayoutMode? _appliedSplitLayoutMode;
     private Win32Properties.CustomWndProcHookCallback? _wndProcHook;
@@ -99,15 +106,10 @@ public partial class MainWindow : Window
 
         FrameFluxPlayer.PlayerFactory = new FfmpegMediaPlayerFactory();
         // Media comes from our prepared loopback proxy. Avoid the backend's 3-second HTTP startup buffer.
-        FrameFluxPlayer.OpenOptions = new MediaOpenOptions
-        {
-            Network = new MediaNetworkOptions
-            {
-                InitialBufferDuration = TimeSpan.FromMilliseconds(150),
-                RebufferDuration = TimeSpan.FromMilliseconds(750)
-            }
-        };
+        FrameFluxPlayer.OpenOptions = BuildOpenOptions();
         ApplyRenderMode(_viewModel.Player.RenderMode);
+        ApplyPlayerVolume();
+        EmbeddedDanmakuOverlay.SetPlayer(_viewModel.Player);
         FrameFluxPlayer.PlaybackStateChanged += OnFrameFluxPlaybackStateChanged;
         FrameFluxPlayer.PlaybackError += OnFrameFluxPlaybackError;
         FrameFluxPlayer.PropertyChanged += (_, e) =>
@@ -127,7 +129,16 @@ public partial class MainWindow : Window
         _controlsIdleHideTimer.Tick += OnControlsIdleHideTick;
 
         SizeChanged += OnWindowSizeChanged;
-        PositionChanged += (_, _) => RememberWindowBounds();
+        PositionChanged += (_, _) =>
+        {
+            RememberWindowBounds();
+            SyncNativeDanmakuOverlay();
+        };
+        PlayerViewportBox.LayoutUpdated += (_, _) =>
+        {
+            if (_viewModel.Player.UseNativeDanmakuOverlay)
+                SyncNativeDanmakuOverlay();
+        };
         Opened += (_, _) =>
         {
             if (_hasOpenedOnce) return;
@@ -148,8 +159,18 @@ public partial class MainWindow : Window
         };
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
         AddHandler(PointerPressedEvent, OnWindowTunnelPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        DockedMenuPanel.AddHandler(PointerPressedEvent, (_, _) => _isDockedMenuPointerCaptured = true, RoutingStrategies.Tunnel, handledEventsToo: true);
+        DockedMenuPanel.AddHandler(PointerReleasedEvent, (_, _) => _isDockedMenuPointerCaptured = false, RoutingStrategies.Tunnel, handledEventsToo: true);
+        DockedMenuPanel.AddHandler(PointerCaptureLostEvent, (_, _) => _isDockedMenuPointerCaptured = false, RoutingStrategies.Bubble, handledEventsToo: true);
         Closed += (_, _) =>
         {
+            _nativeDanmakuWindow?.Overlay.SetPlayer(null);
+            _nativeDanmakuWindow?.Close();
+            _nativeDanmakuWindow = null;
+            EmbeddedDanmakuOverlay.SetPlayer(null);
+            _reloadOptionsCts?.Cancel();
+            _reloadOptionsCts?.Dispose();
+            _reloadOptionsCts = null;
             _playbackSyncTimer.Stop();
             _controlsExitHideTimer.Stop();
             _controlsIdleHideTimer.Stop();
@@ -161,11 +182,14 @@ public partial class MainWindow : Window
         {
             if (e.Property == WindowStateProperty)
                 UpdateMaximizeIcons();
+            if (e.Property == WindowStateProperty || e.Property == IsVisibleProperty || e.Property == TopmostProperty)
+                SyncNativeDanmakuOverlay();
         };
         _viewModel.Player.StreamDimensionsChanged += OnStreamDimensionsChanged;
         _viewModel.Player.MiniModeChanged += OnMiniModeChanged;
         _viewModel.Player.MiniPinChanged += pinned => Topmost = pinned;
         _viewModel.Player.RenderModeChanged += OnRenderModeChanged;
+        _viewModel.Player.AudioBoostChanged += OnAudioBoostChanged;
         _viewModel.Player.SeekRequested += ts =>
         {
             _eofStalledTicks = 0;
@@ -190,13 +214,20 @@ public partial class MainWindow : Window
             UpdateNativeSurfaceControlsVisibility();
         }
 
+        var isLeftDown = OperatingSystem.IsWindows() && (GetAsyncKeyState(0x01) & 0x8000) != 0;
+        var freshLeftClick = isLeftDown && !_wasNativeLeftMouseDown;
+        _wasNativeLeftMouseDown = isLeftDown;
+        if (!isLeftDown)
+            _isDockedMenuPointerCaptured = false;
+
         // In NativeSurface mode, child HWND consumes clicks directly without raising MainWindow PointerPressed.
-        // Dismiss any open menu popup if the user clicks over the video surface itself.
+        // Dismiss any open menu popup only on a fresh click over the video surface itself (outside popup & bar).
         if (_viewModel.Player.IsAnyMenuOpen
             && _viewModel.Player.IsNativeSurfaceMode
+            && freshLeftClick
+            && !_isDockedMenuPointerCaptured
             && !DockedMenuPopup.IsPointerOverPopup
-            && OperatingSystem.IsWindows()
-            && (GetAsyncKeyState(0x01) & 0x8000) != 0
+            && !IsCursorOverVisual(DockedMenuPanel)
             && IsCursorOverVisual(PlayerViewportBox)
             && !IsCursorOverVisual(DockedTransportBar))
         {
@@ -216,6 +247,7 @@ public partial class MainWindow : Window
                 && resumeSec < durVal.TotalSeconds - 0.5)
             {
                 _ = FrameFluxPlayer.SeekAsync(TimeSpan.FromSeconds(resumeSec));
+                _viewModel.Player.NotifyDanmakuSeeked(resumeSec);
                 _lastObservedPosSeconds = resumeSec;
                 _eofStalledTicks = 0;
                 return;
@@ -260,28 +292,93 @@ public partial class MainWindow : Window
         };
     }
 
+    private MediaOpenOptions BuildOpenOptions() => new()
+    {
+        Network = new MediaNetworkOptions
+        {
+            InitialBufferDuration = TimeSpan.FromMilliseconds(150),
+            RebufferDuration = TimeSpan.FromMilliseconds(750)
+        },
+        Audio = new MediaAudioOptions
+        {
+            GainDecibels = _viewModel.Player.AudioBoostDb
+        }
+    };
+
     private async void OnRenderModeChanged(VideoRenderMode mode)
     {
         ApplyRenderMode(mode);
-        var url = _viewModel.Player.ResolvedPlayUrl;
-        if (string.IsNullOrWhiteSpace(url))
-            return;
+        await ReloadCurrentMediaWithOptionsAsync();
+    }
 
-        var resumePos = FrameFluxPlayer.Position.TotalSeconds;
-        await FrameFluxPlayer.StopAsync();
-        FrameFluxPlayer.Source = null;
+    private async void OnAudioBoostChanged(double _)
+    {
+        await ReloadCurrentMediaWithOptionsAsync();
+    }
 
-        _eofStalledTicks = 0;
-        _eofNotifiedForCurrentUrl = false;
-        _lastObservedPosSeconds = -1;
-        FrameFluxPlayer.PlaybackRate = _viewModel.Player.PlaybackRate;
-        FrameFluxPlayer.Source = MediaSource.FromUri(url);
+    private async Task ReloadCurrentMediaWithOptionsAsync()
+    {
+        _reloadOptionsCts?.Cancel();
+        _reloadOptionsCts?.Dispose();
+        var cts = _reloadOptionsCts = new CancellationTokenSource();
+        var ct = cts.Token;
 
-        if (resumePos > 0.5)
+        try
         {
-            await Task.Delay(250);
-            if (_viewModel.Player.IsOpen && FrameFluxPlayer.Source is not null)
-                await FrameFluxPlayer.SeekAsync(TimeSpan.FromSeconds(resumePos));
+            var url = _viewModel.Player.ResolvedPlayUrl;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                FrameFluxPlayer.OpenOptions = BuildOpenOptions();
+                return;
+            }
+
+            // Preserve original position/play state across rapid back-to-back option clicks.
+            _pendingOptionsReloadResumePos ??= FrameFluxPlayer.Position.TotalSeconds;
+            _pendingOptionsReloadWasPlaying ??= _viewModel.Player.IsPlaying;
+            var resumePos = _pendingOptionsReloadResumePos.Value;
+            var wasPlaying = _pendingOptionsReloadWasPlaying.Value;
+
+            _awaitingSourcePlayback = true;
+            await FrameFluxPlayer.StopAsync();
+            if (ct.IsCancellationRequested || _isClosing) return;
+
+            FrameFluxPlayer.Source = null;
+            _eofStalledTicks = 0;
+            _eofNotifiedForCurrentUrl = false;
+            _lastObservedPosSeconds = -1;
+            FrameFluxPlayer.OpenOptions = BuildOpenOptions();
+            FrameFluxPlayer.PlaybackRate = _viewModel.Player.PlaybackRate;
+            ApplyPlayerVolume();
+            FrameFluxPlayer.Source = MediaSource.FromUri(url);
+
+            if (resumePos > 0.5)
+            {
+                await Task.Delay(250, ct);
+                if (!ct.IsCancellationRequested && !_isClosing && _viewModel.Player.IsOpen && FrameFluxPlayer.Source is not null)
+                    await FrameFluxPlayer.SeekAsync(TimeSpan.FromSeconds(resumePos));
+            }
+
+            if (!wasPlaying && !ct.IsCancellationRequested && !_isClosing && _viewModel.Player.IsOpen && FrameFluxPlayer.Source is not null)
+            {
+                await FrameFluxPlayer.PauseAsync();
+                _awaitingSourcePlayback = false;
+            }
+
+            if (!ct.IsCancellationRequested)
+            {
+                _pendingOptionsReloadResumePos = null;
+                _pendingOptionsReloadWasPlaying = null;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer option reload or window close.
+        }
+        catch
+        {
+            _awaitingSourcePlayback = false;
+            _pendingOptionsReloadResumePos = null;
+            _pendingOptionsReloadWasPlaying = null;
         }
     }
 
@@ -316,7 +413,9 @@ public partial class MainWindow : Window
     private bool IsNativeCursorInActiveStage(WinPoint pt)
     {
         if (_viewModel.Player.IsMiniMode)
-            return IsPointOverVisual(PlayerStageWrap, pt) || DockedMenuPopup.IsPointerOverPopup;
+            return IsPointOverVisual(PlayerStageWrap, pt)
+                || DockedMenuPopup.IsPointerOverPopup
+                || IsPointOverVisual(DockedMenuPanel, pt);
 
         if (IsPointOverVisual(PlayerViewportBox, pt))
             return true;
@@ -327,6 +426,7 @@ public partial class MainWindow : Window
         if (IsPointOverVisual(DockedTransportBar, pt)
             || IsPointOverVisual(FloatingTransportBar, pt)
             || IsPointOverVisual(FloatingMenuPanel, pt)
+            || IsPointOverVisual(DockedMenuPanel, pt)
             || DockedMenuPopup.IsPointerOverPopup)
             return true;
 
@@ -334,11 +434,21 @@ public partial class MainWindow : Window
         return IsPointOverVisual(PlayerStageWrap, pt) && IsPointHorizontallyWithin(PlayerViewportBox, pt);
     }
 
+    private bool IsVisualReadyForScreenHitTest(Visual? visual)
+    {
+        if (!OperatingSystem.IsWindows() || visual is null || !IsVisible || !visual.IsEffectivelyVisible)
+            return false;
+        if (ReferenceEquals(visual, DockedMenuPanel) && !DockedMenuPopup.IsOpen)
+            return false;
+        return Avalonia.VisualTree.VisualExtensions.IsAttachedToVisualTree(visual)
+            && TopLevel.GetTopLevel(visual)?.PlatformImpl is not null;
+    }
+
     private bool IsPointOverVisual(Visual? visual, WinPoint pt)
     {
-        if (!OperatingSystem.IsWindows() || visual is null || !visual.IsEffectivelyVisible || !IsVisible)
+        if (!IsVisualReadyForScreenHitTest(visual))
             return false;
-        if (visual.Bounds.Width <= 0 || visual.Bounds.Height <= 0)
+        if (visual!.Bounds.Width <= 0 || visual.Bounds.Height <= 0)
             return false;
         var tl = visual.PointToScreen(new Point(0, 0));
         var br = visual.PointToScreen(new Point(visual.Bounds.Width, visual.Bounds.Height));
@@ -347,9 +457,9 @@ public partial class MainWindow : Window
 
     private bool IsPointHorizontallyWithin(Visual? visual, WinPoint pt)
     {
-        if (!OperatingSystem.IsWindows() || visual is null || !visual.IsEffectivelyVisible || !IsVisible)
+        if (!IsVisualReadyForScreenHitTest(visual))
             return false;
-        if (visual.Bounds.Width <= 0)
+        if (visual!.Bounds.Width <= 0)
             return false;
         var tl = visual.PointToScreen(new Point(0, 0));
         var br = visual.PointToScreen(new Point(visual.Bounds.Width, visual.Bounds.Height));
@@ -361,6 +471,7 @@ public partial class MainWindow : Window
 
     private void OnDockedMenuPopupClosed(object? sender, EventArgs e)
     {
+        _isDockedMenuPointerCaptured = false;
         _viewModel.Player.CloseMenu();
         ScheduleControlsExitHide();
         ResetControlsIdleTimer();
@@ -398,7 +509,7 @@ public partial class MainWindow : Window
         {
             if (ReferenceEquals(current, FloatingMenuPanel) || ReferenceEquals(current, DockedMenuPanel))
                 return true;
-            if (current is Button { Name: "RenderModeBtn" or "SpeedSelectBtn" or "QualitySelectBtn" })
+            if (current is Button { Name: "RenderModeBtn" or "SpeedSelectBtn" or "QualitySelectBtn" or "VolumeBtn" })
                 return true;
         }
         return false;
@@ -451,6 +562,7 @@ public partial class MainWindow : Window
             {
                 _awaitingSourcePlayback = true;
                 FrameFluxPlayer.PlaybackRate = _viewModel.Player.PlaybackRate;
+                ApplyPlayerVolume();
                 FrameFluxPlayer.Source = MediaSource.FromUri(url);
             }
         }
@@ -465,6 +577,51 @@ public partial class MainWindow : Window
         {
             FrameFluxPlayer.PlaybackRate = _viewModel.Player.PlaybackRate;
         }
+        else if (e.PropertyName is nameof(PlayerViewModel.Volume) or nameof(PlayerViewModel.IsMuted))
+        {
+            ApplyPlayerVolume();
+        }
+        else if (e.PropertyName is nameof(PlayerViewModel.UseNativeDanmakuOverlay)
+                 or nameof(PlayerViewModel.IsDanmakuEnabled)
+                 or nameof(PlayerViewModel.HasRealMediaUrl)
+                 or nameof(PlayerViewModel.IsOpen))
+        {
+            SyncNativeDanmakuOverlay();
+        }
+    }
+
+    private void SyncNativeDanmakuOverlay()
+    {
+        if (!OperatingSystem.IsWindows()
+            || _isClosing
+            || !IsVisible
+            || WindowState == WindowState.Minimized
+            || !_viewModel.Player.UseNativeDanmakuOverlay
+            || !IsVisualReadyForScreenHitTest(PlayerViewportBox)
+            || PlayerViewportBox.Bounds.Width <= 1
+            || PlayerViewportBox.Bounds.Height <= 1)
+        {
+            if (_nativeDanmakuWindow is { IsVisible: true })
+                _nativeDanmakuWindow.Hide();
+            return;
+        }
+
+        if (_nativeDanmakuWindow is null)
+        {
+            _nativeDanmakuWindow = new DanmakuNativeOverlayWindow();
+            _nativeDanmakuWindow.Overlay.SetPlayer(_viewModel.Player);
+        }
+
+        var origin = PlayerViewportBox.PointToScreen(new Point(0, 0));
+        _nativeDanmakuWindow.SyncBounds(origin, PlayerViewportBox.Bounds.Width, PlayerViewportBox.Bounds.Height, Topmost);
+        if (!_nativeDanmakuWindow.IsVisible)
+            _nativeDanmakuWindow.Show(this);
+    }
+
+    private void ApplyPlayerVolume()
+    {
+        FrameFluxPlayer.Volume = _viewModel.Player.Volume;
+        FrameFluxPlayer.IsMuted = _viewModel.Player.IsMuted;
     }
 
     private void OnFrameFluxPlaybackError(object? sender, MediaPlaybackErrorEventArgs e)
@@ -1013,7 +1170,7 @@ public partial class MainWindow : Window
 
     private bool ShouldKeepControlsVisible(bool forExitCheck = false)
     {
-        if (_viewModel.Player.IsAnyMenuOpen || DockedMenuPopup.IsPointerOverPopup)
+        if (_viewModel.Player.IsAnyMenuOpen || _isDockedMenuPointerCaptured || DockedMenuPopup.IsPointerOverPopup)
             return true;
         if (_viewModel.Player.HasStreamError)
             return true;
@@ -1031,6 +1188,7 @@ public partial class MainWindow : Window
             return IsPointOverVisual(FloatingTransportBar, pt)
                 || IsPointOverVisual(DockedTransportBar, pt)
                 || IsPointOverVisual(FloatingMenuPanel, pt)
+                || IsPointOverVisual(DockedMenuPanel, pt)
                 || IsPointOverVisual(FloatingMiniTopBar, pt)
                 || IsPointOverVisual(DockedMiniTopBar, pt)
                 || DockedMenuPopup.IsPointerOverPopup;

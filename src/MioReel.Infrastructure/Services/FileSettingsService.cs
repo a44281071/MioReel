@@ -90,7 +90,10 @@ public sealed class FileSettingsService : ISettingsService
             "Downloads"),
         GatewayBaseUrl: "https://miaomiaotv.diaofanle.com",
         GatewayToken: "248b4593caed441eb05ae0f124cf04cb",
-        Hotkeys: HotkeySettings.CreateDefaults());
+        Hotkeys: HotkeySettings.CreateDefaults(),
+        Volume: 1.0,
+        IsMuted: false,
+        DanmakuEnabled: true);
 
     private static AppSettings Normalize(AppSettings value, AppSettings? fallback = null)
     {
@@ -99,6 +102,9 @@ public sealed class FileSettingsService : ISettingsService
         {
             DefaultQuality = value.DefaultQuality > 0 ? value.DefaultQuality : baseFallback.DefaultQuality,
             PlaybackRate = double.IsFinite(value.PlaybackRate) && value.PlaybackRate is >= 0.5 and <= 3 ? value.PlaybackRate : 1.0,
+            Volume = value.Volume is { } vol && double.IsFinite(vol) ? Math.Clamp(vol, 0.0, 1.0) : (baseFallback.Volume ?? 1.0),
+            AudioBoostDb = double.IsFinite(value.AudioBoostDb) ? Math.Clamp(value.AudioBoostDb, 0.0, 24.0) : 0.0,
+            DanmakuEnabled = value.DanmakuEnabled ?? baseFallback.DanmakuEnabled ?? true,
             DownloadDirectory = string.IsNullOrWhiteSpace(value.DownloadDirectory)
                 ? baseFallback.DownloadDirectory
                 : value.DownloadDirectory.Trim(),
