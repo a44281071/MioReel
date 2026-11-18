@@ -9,7 +9,7 @@
     <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
     <ApplicationTitle>妙妙短剧</ApplicationTitle>
-    <ApplicationIcon>Assets\MioReel.ico</ApplicationIcon>
+    <ApplicationIcon>Assets/MioReel.ico</ApplicationIcon>
     <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows')) or $(RuntimeIdentifier.StartsWith('win'))">$(DefineConstants);FF_WINDOWS</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Linux')) or $(RuntimeIdentifier.StartsWith('linux'))">$(DefineConstants);FF_LINUX</DefineConstants>
   </PropertyGroup>
