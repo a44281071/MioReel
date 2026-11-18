@@ -155,8 +155,6 @@ public static class WindowPlacementPolicy
     public static (int ClientWidth, int ClientHeight) SnapMiniDimensions(
         int proposedClientWidth,
         int proposedClientHeight,
-        int currentClientWidth,
-        int currentClientHeight,
         int edge,
         int minClientWidth,
         int minClientHeight,
@@ -168,16 +166,9 @@ public static class WindowPlacementPolicy
         maxClientWidth = Math.Max(minClientWidth, maxClientWidth);
         maxClientHeight = Math.Max(minClientHeight, maxClientHeight);
 
-        bool useWidth = edge switch
-        {
-            EdgeLeft or EdgeRight => true,
-            EdgeTop or EdgeBottom => false,
-            _ => Math.Abs(proposedClientWidth - currentClientWidth) >= Math.Abs(proposedClientHeight - currentClientHeight) * aspectRatio
-        };
-
         int cw;
         int ch;
-        if (useWidth)
+        if (edge is EdgeLeft or EdgeRight)
         {
             cw = Math.Clamp(proposedClientWidth, minClientWidth, maxClientWidth);
             ch = (int)Math.Round(cw / aspectRatio);
@@ -192,9 +183,26 @@ public static class WindowPlacementPolicy
                 cw = (int)Math.Round(ch * aspectRatio);
             }
         }
-        else
+        else if (edge is EdgeTop or EdgeBottom)
         {
             ch = Math.Clamp(proposedClientHeight, minClientHeight, maxClientHeight);
+            cw = (int)Math.Round(ch * aspectRatio);
+            if (cw < minClientWidth)
+            {
+                cw = minClientWidth;
+                ch = (int)Math.Round(cw / aspectRatio);
+            }
+            else if (cw > maxClientWidth)
+            {
+                cw = maxClientWidth;
+                ch = (int)Math.Round(cw / aspectRatio);
+            }
+        }
+        else
+        {
+            // Stateless orthogonal projection onto the aspect-ratio line prevents frame-to-frame oscillation on corner drags.
+            var projectedH = (aspectRatio * proposedClientWidth + proposedClientHeight) / (aspectRatio * aspectRatio + 1.0);
+            ch = Math.Clamp((int)Math.Round(projectedH), minClientHeight, maxClientHeight);
             cw = (int)Math.Round(ch * aspectRatio);
             if (cw < minClientWidth)
             {

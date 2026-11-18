@@ -141,6 +141,28 @@ try
     await DownloadRegressionTests.RunAsync(root);
     HotkeyRegressionTests.Run(root);
 
+    var instanceId = "MioReel.Test." + Guid.NewGuid().ToString("N");
+    using (var primary = MioReel.Desktop.Services.SingleInstanceGuard.TryAcquire(instanceId))
+    {
+        Check(primary is not null, "首次启动成功获取单实例互斥锁");
+        var secondAcquired = await Task.Run(() =>
+        {
+            using var secondary = MioReel.Desktop.Services.SingleInstanceGuard.TryAcquire(instanceId);
+            return secondary is not null;
+        });
+        Check(!secondAcquired, "重复启动时进程互斥阻止第二个实例进入");
+
+        var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        primary!.StartListening(() => activated.TrySetResult());
+        MioReel.Desktop.Services.SingleInstanceGuard.SignalExistingInstance(instanceId);
+        await activated.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Check(activated.Task.IsCompletedSuccessfully, "重复启动可唤醒已存在的主实例");
+    }
+    using (var reacquired = MioReel.Desktop.Services.SingleInstanceGuard.TryAcquire(instanceId))
+    {
+        Check(reacquired is not null, "主实例退出释放锁后允许再次启动");
+    }
+
     await using var upstream = new RangeServer();
     using var mediaProxy = new LocalMediaProxyService();
     var info = new ResolvedStreamInfo("range", 1, upstream.Url, new Dictionary<string, string>(), "", "none", 1080, 720, 1280, "h264", 0);

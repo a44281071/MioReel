@@ -16,12 +16,16 @@ public partial class DramaCoverControl : UserControl
     public static readonly StyledProperty<bool> ShowBadgesProperty =
         AvaloniaProperty.Register<DramaCoverControl, bool>(nameof(ShowBadges), true);
 
+    public static readonly StyledProperty<double> BlurRadiusProperty =
+        AvaloniaProperty.Register<DramaCoverControl, double>(nameof(BlurRadius), 0d);
+
     static DramaCoverControl()
     {
         DramaProperty.Changed.AddClassHandler<DramaCoverControl>((ctrl, _) => ctrl.SyncDrama());
         ShowTextOverlayProperty.Changed.AddClassHandler<DramaCoverControl>((ctrl, _) => ctrl.SyncOverlay());
         ShowBadgesProperty.Changed.AddClassHandler<DramaCoverControl>((ctrl, _) => ctrl.UpdateBadgeVisibility(ctrl.Bounds.Width));
         CornerRadiusProperty.Changed.AddClassHandler<DramaCoverControl>((ctrl, _) => ctrl.SyncCornerRadius());
+        BlurRadiusProperty.Changed.AddClassHandler<DramaCoverControl>((ctrl, _) => ctrl.SyncBlurEffect());
     }
 
     public DramaCoverControl()
@@ -30,6 +34,7 @@ public partial class DramaCoverControl : UserControl
         SizeChanged += (_, e) => UpdateBadgeVisibility(e.NewSize.Width);
         SyncCornerRadius();
         SyncOverlay();
+        SyncBlurEffect();
         SyncDrama();
     }
 
@@ -49,6 +54,34 @@ public partial class DramaCoverControl : UserControl
     {
         get => GetValue(ShowBadgesProperty);
         set => SetValue(ShowBadgesProperty, value);
+    }
+
+    public double BlurRadius
+    {
+        get => GetValue(BlurRadiusProperty);
+        set => SetValue(BlurRadiusProperty, value);
+    }
+
+    private void SyncBlurEffect()
+    {
+        if (BackdropLayer is null || RootBorder is null) return;
+        var radius = Math.Max(0, BlurRadius);
+        if (radius > 0)
+        {
+            BackdropLayer.Effect = new BlurEffect { Radius = radius };
+            BackdropLayer.Margin = new Thickness(-radius);
+            RootBorder.BorderThickness = new Thickness(0);
+            if (CenterWatermark is not null)
+                CenterWatermark.IsVisible = false;
+        }
+        else
+        {
+            BackdropLayer.Effect = null;
+            BackdropLayer.Margin = new Thickness(0);
+            RootBorder.BorderThickness = new Thickness(1);
+            if (CenterWatermark is not null && CoverImage is not null)
+                CenterWatermark.IsVisible = !CoverImage.IsVisible;
+        }
     }
 
     private void UpdateBadgeVisibility(double width)
@@ -135,7 +168,7 @@ public partial class DramaCoverControl : UserControl
         {
             CoverImage.Source = null;
             CoverImage.IsVisible = false;
-            CenterWatermark.IsVisible = true;
+            CenterWatermark.IsVisible = BlurRadius <= 0;
             return;
         }
 
@@ -149,7 +182,7 @@ public partial class DramaCoverControl : UserControl
 
         CoverImage.Source = null;
         CoverImage.IsVisible = false;
-        CenterWatermark.IsVisible = true;
+        CenterWatermark.IsVisible = BlurRadius <= 0;
         _ = LoadCoverImageAsync(drama.SeriesId, url);
     }
 

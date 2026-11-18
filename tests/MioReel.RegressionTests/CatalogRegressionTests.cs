@@ -108,11 +108,16 @@ internal static class CatalogRegressionTests
         Assert(scaledDown.Width == 284 && scaledDown.Height == 160, "小窗缩小到最小边界仍保持16:9比例");
 
         var snappedRight = WindowPlacementPolicy.SnapMiniDimensions(
-            480, 600, 360, 640, WindowPlacementPolicy.EdgeRight, 260, 462, 607, 1080, 9.0 / 16.0);
+            480, 600, WindowPlacementPolicy.EdgeRight, 260, 462, 607, 1080, 9.0 / 16.0);
         Assert(snappedRight.ClientWidth == 480 && snappedRight.ClientHeight == 853, "拖动小窗右边沿按竖屏视频比例联动高度");
         var snappedTop = WindowPlacementPolicy.SnapMiniDimensions(
-            400, 270, 544, 306, WindowPlacementPolicy.EdgeTop, 284, 160, 1920, 1080, 16.0 / 9.0);
+            400, 270, WindowPlacementPolicy.EdgeTop, 284, 160, 1920, 1080, 16.0 / 9.0);
         Assert(snappedTop.ClientHeight == 270 && snappedTop.ClientWidth == 480, "拖动小窗上边沿按横屏视频比例联动宽度");
+        var corner1 = WindowPlacementPolicy.SnapMiniDimensions(
+            370, 642, WindowPlacementPolicy.EdgeBottomRight, 260, 462, 607, 1080, 9.0 / 16.0);
+        var corner2 = WindowPlacementPolicy.SnapMiniDimensions(
+            371, 643, WindowPlacementPolicy.EdgeBottomRight, 260, 462, 607, 1080, 9.0 / 16.0);
+        Assert(corner2.ClientWidth >= corner1.ClientWidth && corner2.ClientHeight >= corner1.ClientHeight, "拖动小窗角点连续放大保持单调递增不抖动");
     }
 
     private static MainWindowViewModel Create(IDramaCatalogService source, ISettingsService? settingsOverride = null)

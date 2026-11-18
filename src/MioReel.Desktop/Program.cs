@@ -7,6 +7,7 @@ using Aviora.Presentation.Toasts;
 using FrameFlux.Avalonia;
 using Microsoft.Extensions.DependencyInjection;
 using MioReel.Core.Abstractions;
+using MioReel.Desktop.Services;
 using MioReel.Desktop.Services.Hotkeys;
 using MioReel.Desktop.ViewModels;
 using MioReel.Desktop.Views;
@@ -17,11 +18,31 @@ namespace MioReel.Desktop;
 
 public static class Program
 {
+    private const string SingleInstanceAppId = "MioReel.Desktop";
+
     public static IServiceProvider Services { get; private set; } = null!;
+    internal static SingleInstanceGuard? InstanceGuard { get; private set; }
 
     [STAThread]
-    public static void Main(string[] args) =>
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        using var guard = SingleInstanceGuard.TryAcquire(SingleInstanceAppId);
+        if (guard is null)
+        {
+            SingleInstanceGuard.SignalExistingInstance(SingleInstanceAppId);
+            return;
+        }
+
+        InstanceGuard = guard;
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            InstanceGuard = null;
+        }
+    }
 
     public static AppBuilder BuildAvaloniaApp()
     {

@@ -40,6 +40,9 @@ public partial class MainWindow : Window
     private Point? _lastStagePointerPos;
     private WinPoint? _lastNativeCursorPos;
     private bool _isAdjustingMiniAspect;
+    private bool _isInWin32SizeMove;
+    private bool? _appliedSplitMiniMode;
+    private WindowLayoutMode? _appliedSplitLayoutMode;
     private Win32Properties.CustomWndProcHookCallback? _wndProcHook;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -59,6 +62,9 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(IntPtr hWnd, out WinRect lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     public MainWindow()
     {
@@ -503,12 +509,14 @@ public partial class MainWindow : Window
         };
 
         UpdatePlayerSplitLayout();
-        FitPlayerViewport();
-        RememberWindowBounds();
+        if (!_isInWin32SizeMove)
+            RememberWindowBounds();
 
-        if (_viewModel.Player.IsMiniMode
+        if (!OperatingSystem.IsWindows()
+            && _viewModel.Player.IsMiniMode
             && !_isTransitioningMini
             && !_isAdjustingMiniAspect
+            && !_isInWin32SizeMove
             && !_isClosing
             && WindowState == WindowState.Normal
             && w > 0
@@ -524,7 +532,15 @@ public partial class MainWindow : Window
     {
         if (PlayerSplitGrid is null || PlayerSidePanel is null) return;
 
-        if (_viewModel.Player.IsMiniMode)
+        var isMini = _viewModel.Player.IsMiniMode;
+        var layoutMode = _viewModel.LayoutMode;
+        if (_appliedSplitMiniMode == isMini && (isMini || _appliedSplitLayoutMode == layoutMode))
+            return;
+
+        _appliedSplitMiniMode = isMini;
+        _appliedSplitLayoutMode = layoutMode;
+
+        if (isMini)
         {
             PlayerSplitGrid.ColumnSpacing = 0;
             PlayerSplitGrid.RowSpacing = 0;
@@ -540,7 +556,7 @@ public partial class MainWindow : Window
         PlayerStageWrap.BorderThickness = new Thickness(1);
         PlayerViewportBox.CornerRadius = new CornerRadius(16);
 
-        if (_viewModel.LayoutMode == WindowLayoutMode.Narrow)
+        if (layoutMode == WindowLayoutMode.Narrow)
         {
             PlayerSplitGrid.ColumnSpacing = 0;
             PlayerSplitGrid.RowSpacing = 14;
@@ -633,6 +649,22 @@ public partial class MainWindow : Window
     private IntPtr OnWin32WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const uint WmSizing = 0x0214;
+        const uint WmEnterSizeMove = 0x0231;
+        const uint WmExitSizeMove = 0x0232;
+
+        if (msg == WmEnterSizeMove)
+        {
+            _isInWin32SizeMove = true;
+            return IntPtr.Zero;
+        }
+
+        if (msg == WmExitSizeMove)
+        {
+            _isInWin32SizeMove = false;
+            RememberWindowBounds();
+            return IntPtr.Zero;
+        }
+
         if (msg != WmSizing || lParam == IntPtr.Zero || !_viewModel.Player.IsMiniMode || _isTransitioningMini || _isClosing)
             return IntPtr.Zero;
 
@@ -661,11 +693,9 @@ public partial class MainWindow : Window
         var edge = (int)wParam;
         var proposedCW = (right - left) - frameW;
         var proposedCH = (bottom - top) - frameH;
-        var curCW = cr.Right - cr.Left;
-        var curCH = cr.Bottom - cr.Top;
 
         var (cw, ch) = WindowPlacementPolicy.SnapMiniDimensions(
-            proposedCW, proposedCH, curCW, curCH, edge,
+            proposedCW, proposedCH, edge,
             minCW, minCH, maxCW, maxCH, ratio);
 
         var newOuterW = cw + frameW;
@@ -708,8 +738,12 @@ public partial class MainWindow : Window
             fitW = fitH * ratio;
         }
 
-        PlayerViewportBox.Width = Math.Round(fitW);
-        PlayerViewportBox.Height = Math.Round(fitH);
+        var targetW = Math.Round(fitW);
+        var targetH = Math.Round(fitH);
+        if (Math.Abs(PlayerViewportBox.Width - targetW) >= 0.5)
+            PlayerViewportBox.Width = targetW;
+        if (Math.Abs(PlayerViewportBox.Height - targetH) >= 0.5)
+            PlayerViewportBox.Height = targetH;
     }
 
     private void OnMiniModeChanged(bool isMini, bool isLandscape)
@@ -1186,6 +1220,27 @@ public partial class MainWindow : Window
         if (_viewModel.Player.IsMiniMode)
             Topmost = _viewModel.Player.IsMiniPinned;
         Activate();
+    }
+
+    public void BringToForeground()
+    {
+        if (_isClosing) return;
+        if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        if (_viewModel.Player.IsMiniMode)
+            Topmost = _viewModel.Player.IsMiniPinned;
+        Activate();
+        if (OperatingSystem.IsWindows())
+        {
+            if (!Topmost)
+            {
+                Topmost = true;
+                Topmost = false;
+            }
+            if (TryGetPlatformHandle()?.Handle is { } hwnd && hwnd != IntPtr.Zero)
+                SetForegroundWindow(hwnd);
+        }
     }
 
     private void RestoreWindowFromHotkey()

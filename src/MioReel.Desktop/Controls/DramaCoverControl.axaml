@@ -7,15 +7,17 @@
           BorderThickness="1"
           Background="#141622">
     <Grid>
-      <!-- Soft Ambient Spotlight Gradients (no harsh circles) -->
-      <Border x:Name="GlowTop" IsHitTestVisible="False" />
-      <Border x:Name="GlowBottom" IsHitTestVisible="False" />
+      <Grid x:Name="BackdropLayer">
+        <!-- Soft Ambient Spotlight Gradients (no harsh circles) -->
+        <Border x:Name="GlowTop" IsHitTestVisible="False" />
+        <Border x:Name="GlowBottom" IsHitTestVisible="False" />
 
-      <!-- Real Gateway Poster Cover Image -->
-      <Image x:Name="CoverImage"
-             Stretch="UniformToFill"
-             IsHitTestVisible="False"
-             IsVisible="False" />
+        <!-- Real Gateway Poster Cover Image -->
+        <Image x:Name="CoverImage"
+               Stretch="UniformToFill"
+               IsHitTestVisible="False"
+               IsVisible="False" />
+      </Grid>
 
       <!-- Subtle Cinema Diagonal Gloss -->
       <Border IsHitTestVisible="False" Opacity="0.16">

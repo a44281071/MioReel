@@ -462,34 +462,51 @@
                             PointerPressed="OnStagePointerPressed"
                             DoubleTapped="OnStageDoubleTapped"
                             PointerWheelChanged="OnStagePointerWheelChanged">
-                      <Grid RowDefinitions="Auto,*,Auto">
-                        <!-- Row 0: Docked Mini Top Bar (NativeSurface Mode) -->
-                        <controls:PlayerMiniTopBar x:Name="DockedMiniTopBar"
-                                                   Grid.Row="0"
-                                                   DataContext="{Binding Player}"
-                                                   IsVisible="{Binding UseDockedMiniTopBar}"
-                                                   PointerEntered="OnStageControlPointerEntered"
-                                                   PointerExited="OnStageControlPointerExited" />
+                      <Grid>
+                        <!-- Ambient Gaussian-Blurred Cover Backdrop (Normal Mode) -->
+                        <Grid IsVisible="{Binding !Player.IsMiniMode}"
+                              IsHitTestVisible="False">
+                          <Viewbox Stretch="UniformToFill">
+                            <controls:DramaCoverControl Width="240"
+                                                        Height="320"
+                                                        Drama="{Binding Player.CurrentDrama}"
+                                                        BlurRadius="24"
+                                                        ShowBadges="False"
+                                                        ShowTextOverlay="False" />
+                          </Viewbox>
+                          <Border Background="#9808090E" />
+                        </Grid>
 
-                        <!-- Row 1: Video Viewport -->
-                        <Grid x:Name="PlayerViewportHost"
-                              Grid.Row="1"
-                              SizeChanged="OnPlayerStageSizeChanged">
-                          <Border x:Name="PlayerViewportBox"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  CornerRadius="16"
-                                  ClipToBounds="True"
-                                  Background="#08090E"
-                                  PointerEntered="OnViewportPointerEntered"
-                                  PointerExited="OnViewportPointerExited">
-                            <aviora:Hero Tag="{Binding Player.HeroTag}" CornerRadius="16">
-                              <Grid>
-                                <!-- Cover backdrop before / during stream transition -->
-                                <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}"
-                                                            CornerRadius="16"
-                                                            ShowBadges="False"
-                                                            ShowTextOverlay="False" />
+                        <Grid RowDefinitions="Auto,*,Auto">
+                          <!-- Row 0: Docked Mini Top Bar (NativeSurface Mode) -->
+                          <controls:PlayerMiniTopBar x:Name="DockedMiniTopBar"
+                                                     Grid.Row="0"
+                                                     DataContext="{Binding Player}"
+                                                     IsVisible="{Binding UseDockedMiniTopBar}"
+                                                     PointerEntered="OnStageControlPointerEntered"
+                                                     PointerExited="OnStageControlPointerExited" />
+
+                          <!-- Row 1: Video Viewport -->
+                          <Grid x:Name="PlayerViewportHost"
+                                Grid.Row="1"
+                                SizeChanged="OnPlayerStageSizeChanged">
+                            <Border x:Name="PlayerViewportBox"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    CornerRadius="16"
+                                    ClipToBounds="True"
+                                    Background="#08090E"
+                                    PointerEntered="OnViewportPointerEntered"
+                                    PointerExited="OnViewportPointerExited">
+                              <aviora:Hero Tag="{Binding Player.HeroTag}" CornerRadius="16">
+                                <Grid>
+                                  <!-- Blurred Cover backdrop before / during stream transition -->
+                                  <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}"
+                                                              CornerRadius="16"
+                                                              BlurRadius="26"
+                                                              ShowBadges="False"
+                                                              ShowTextOverlay="False" />
+                                  <Border Background="#4008090E" IsHitTestVisible="False" />
 
                                 <!-- FrameFlux Hardware Video Surface -->
                                 <ff:MediaView x:Name="FrameFluxPlayer"
@@ -577,6 +594,7 @@
                                                                 DataContext="{Binding Player}" />
                             </Border>
                           </Popup>
+                        </Grid>
                         </Grid>
                       </Grid>
                     </Border>

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using Avalonia.Threading;
 #if DEBUG
 using AvaDevTools;
 #endif
@@ -37,6 +38,8 @@ public partial class App : Application
             var window = Program.Services.GetRequiredService<MainWindow>();
             window.DataContext = vm;
             desktop.MainWindow = window;
+            Program.InstanceGuard?.StartListening(() =>
+                Dispatcher.UIThread.Post(window.BringToForeground));
             desktop.Exit += (_, _) => (Program.Services as IDisposable)?.Dispose();
         }
 
