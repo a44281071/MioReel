@@ -10,6 +10,7 @@
         x:Class="MioReel.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="妙妙短剧"
+        Icon="avares://MioReel.Desktop/Assets/MioReel.ico"
         Width="1260"
         Height="780"
         MinWidth="340"
