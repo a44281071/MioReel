@@ -41,6 +41,8 @@ public partial class MainWindow : Window
     private WinPoint? _lastNativeCursorPos;
     private bool _isAdjustingMiniAspect;
     private bool _isInWin32SizeMove;
+    private bool _hasOpenedOnce;
+    private bool _pausedByBossKey;
     private bool? _appliedSplitMiniMode;
     private WindowLayoutMode? _appliedSplitLayoutMode;
     private Win32Properties.CustomWndProcHookCallback? _wndProcHook;
@@ -128,6 +130,8 @@ public partial class MainWindow : Window
         PositionChanged += (_, _) => RememberWindowBounds();
         Opened += (_, _) =>
         {
+            if (_hasOpenedOnce) return;
+            _hasOpenedOnce = true;
             if (OperatingSystem.IsWindows())
             {
                 _wndProcHook = OnWin32WndProc;
@@ -412,6 +416,7 @@ public partial class MainWindow : Window
             }
             else
             {
+                _pausedByBossKey = false;
                 _controlsExitHideTimer.Stop();
                 _controlsIdleHideTimer.Stop();
             }
@@ -1207,30 +1212,27 @@ public partial class MainWindow : Window
         if (IsVisible && WindowState != WindowState.Minimized)
         {
             if (_viewModel.Player.IsOpen && _viewModel.Player.IsPlaying)
+            {
+                _pausedByBossKey = true;
                 _viewModel.Player.IsPlaying = false;
+            }
+            else
+            {
+                _pausedByBossKey = false;
+            }
             RememberWindowBounds();
             SaveWindowPlacements();
             Hide();
             return;
         }
 
-        Show();
-        if (WindowState == WindowState.Minimized)
-            WindowState = WindowState.Normal;
-        if (_viewModel.Player.IsMiniMode)
-            Topmost = _viewModel.Player.IsMiniPinned;
-        Activate();
+        RestoreVisibleWindow();
     }
 
     public void BringToForeground()
     {
         if (_isClosing) return;
-        if (!IsVisible) Show();
-        if (WindowState == WindowState.Minimized)
-            WindowState = WindowState.Normal;
-        if (_viewModel.Player.IsMiniMode)
-            Topmost = _viewModel.Player.IsMiniPinned;
-        Activate();
+        RestoreVisibleWindow();
         if (OperatingSystem.IsWindows())
         {
             if (!Topmost)
@@ -1243,10 +1245,33 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RestoreVisibleWindow()
+    {
+        var savedMini = _miniPlacement;
+        if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        if (_viewModel.Player.IsMiniMode)
+        {
+            WindowDecorations = Avalonia.Controls.WindowDecorations.BorderOnly;
+            Topmost = _viewModel.Player.IsMiniPinned;
+            UpdateWindowMinSize(true);
+            if (savedMini is { } mp)
+                ApplyWindowPlacement(mp, true);
+            UpdatePlayerSplitLayout();
+            FitPlayerViewport();
+        }
+        Activate();
+        if (_pausedByBossKey && _viewModel.Player.IsOpen && _viewModel.Player.HasRealMediaUrl)
+        {
+            _pausedByBossKey = false;
+            _viewModel.Player.IsPlaying = true;
+        }
+    }
+
     private void RestoreWindowFromHotkey()
     {
-        if (!IsVisible)
-            Show();
+        RestoreVisibleWindow();
 
         if (_viewModel.Player.IsMiniMode)
         {

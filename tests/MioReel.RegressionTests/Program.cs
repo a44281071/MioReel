@@ -145,11 +145,14 @@ try
     using (var primary = MioReel.Desktop.Services.SingleInstanceGuard.TryAcquire(instanceId))
     {
         Check(primary is not null, "首次启动成功获取单实例互斥锁");
-        var secondAcquired = await Task.Run(() =>
+        var secondAcquired = false;
+        var probeThread = new Thread(() =>
         {
             using var secondary = MioReel.Desktop.Services.SingleInstanceGuard.TryAcquire(instanceId);
-            return secondary is not null;
+            secondAcquired = secondary is not null;
         });
+        probeThread.Start();
+        probeThread.Join();
         Check(!secondAcquired, "重复启动时进程互斥阻止第二个实例进入");
 
         var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

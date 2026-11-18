@@ -1,19 +1,22 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
              xmlns:vm="using:MioReel.Desktop.ViewModels"
              x:Class="MioReel.Desktop.Controls.PlayerTransportBar"
              x:DataType="vm:PlayerViewModel">
   <Grid>
-    <Border CornerRadius="14"
-            BorderBrush="#24FFFFFF"
-            BorderThickness="1">
-      <Border.Background>
+    <aviora:BackdropBlur CornerRadius="14"
+                         BlurRadius="18"
+                         RenderScale="0.5"
+                         BorderBrush="#30FFFFFF"
+                         BorderThickness="1">
+      <aviora:BackdropBlur.Background>
         <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-          <GradientStop Color="#E8151724" Offset="0" />
-          <GradientStop Color="#EE0B0C14" Offset="1" />
+          <GradientStop Color="#8E141624" Offset="0" />
+          <GradientStop Color="#A80A0B12" Offset="1" />
         </LinearGradientBrush>
-      </Border.Background>
-    </Border>
+      </aviora:BackdropBlur.Background>
+    </aviora:BackdropBlur>
     <StackPanel Margin="10,8" Spacing="6">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
         <TextBlock Text="{Binding CurrentTimeText}" FontSize="{DynamicResource AppMinFontSize}" Foreground="#E2E8F0" VerticalAlignment="Center" />

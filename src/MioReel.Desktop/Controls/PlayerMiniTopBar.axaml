@@ -1,18 +1,22 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:aviora="https://github.com/wobushiafa/Aviora"
              xmlns:vm="using:MioReel.Desktop.ViewModels"
              x:Class="MioReel.Desktop.Controls.PlayerMiniTopBar"
              x:DataType="vm:PlayerViewModel">
-  <Border Padding="12,8"
-          BorderBrush="#18FFFFFF"
-          BorderThickness="0,0,0,1">
-    <Border.Background>
-      <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-        <GradientStop Color="#E20D0F18" Offset="0" />
-        <GradientStop Color="#C4090A10" Offset="1" />
-      </LinearGradientBrush>
-    </Border.Background>
-    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+  <Grid>
+    <aviora:BackdropBlur BlurRadius="16"
+                         RenderScale="0.5"
+                         BorderBrush="#26FFFFFF"
+                         BorderThickness="0,0,0,1">
+      <aviora:BackdropBlur.Background>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#960D0F18" Offset="0" />
+          <GradientStop Color="#7C090A10" Offset="1" />
+        </LinearGradientBrush>
+      </aviora:BackdropBlur.Background>
+    </aviora:BackdropBlur>
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="12,8">
       <TextBlock Text="{Binding MiniTitleText}"
                  FontSize="{DynamicResource AppMinFontSize}"
                  FontWeight="SemiBold"
@@ -36,14 +40,14 @@
                 Command="{Binding ToggleMiniModeCommand}">
           <PathIcon Data="{StaticResource IconRestoreWindow}" Width="13" Height="13" Foreground="#FFFFFF" />
         </Button>
-        <Button AutomationProperties.Name="关闭播放"
-                ToolTip.Tip="关闭播放"
+        <Button AutomationProperties.Name="关闭窗口"
+                ToolTip.Tip="关闭窗口"
                 Classes="player-hud-close"
                 Width="28" Height="28"
-                Command="{Binding CloseCommand}">
+                Click="OnCloseWindowClick">
           <PathIcon Data="{StaticResource IconClose}" Width="12" Height="12" />
         </Button>
       </StackPanel>
     </Grid>
-  </Border>
+  </Grid>
 </UserControl>
