@@ -1,0 +1,553 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MioReel.Desktop.ViewModels"
+             xmlns:models="using:MioReel.Core.Models"
+             xmlns:controls="using:MioReel.Desktop.Controls"
+             x:Class="MioReel.Desktop.Views.AndroidMainView"
+             x:CompileBindings="False"
+             KeyboardNavigation.TabNavigation="Cycle"
+             FontFamily="$Default"
+             Background="#0B0D12"
+             Foreground="#F8FAFC">
+  <UserControl.Styles>
+    <Style Selector="Button.tv">
+      <Setter Property="Background" Value="#171D29" />
+      <Setter Property="Foreground" Value="#F8FAFC" />
+      <Setter Property="BorderBrush" Value="#2A3346" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="16,10" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tv:focus">
+      <Setter Property="Background" Value="#2B1722" />
+      <Setter Property="BorderBrush" Value="#FB7185" />
+      <Setter Property="BorderThickness" Value="3" />
+    </Style>
+    <Style Selector="Button.tv-card">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="6" />
+    </Style>
+    <Style Selector="Button.tv-card:focus">
+      <Setter Property="Background" Value="#1E283A" />
+      <Setter Property="BorderBrush" Value="#FB7185" />
+      <Setter Property="BorderThickness" Value="3" />
+    </Style>
+    <Style Selector="Button.tv-episode">
+      <Setter Property="Background" Value="#171D29" />
+      <Setter Property="Foreground" Value="#F8FAFC" />
+      <Setter Property="BorderBrush" Value="#2A3346" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Width" Value="58" />
+      <Setter Property="Height" Value="44" />
+      <Setter Property="FontSize" Value="16" />
+    </Style>
+    <Style Selector="Button.tv-episode.active">
+      <Setter Property="Background" Value="#FB7185" />
+      <Setter Property="Foreground" Value="#160A0E" />
+      <Setter Property="BorderBrush" Value="#FDA4AF" />
+    </Style>
+    <Style Selector="TextBlock.tv-h1">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.tv-h2">
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.tv-muted">
+      <Setter Property="Foreground" Value="#94A3B8" />
+      <Setter Property="FontSize" Value="15" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid>
+    <!-- Browse shell -->
+    <Grid RowDefinitions="86,*" IsVisible="{Binding !Player.IsOpen}">
+      <Border Background="#10141D" BorderBrush="#1E2431" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="36,0">
+          <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <Border Width="44" Height="44" CornerRadius="12" Background="#FB7185">
+              <TextBlock Text="妙" FontSize="22" FontWeight="Bold" Foreground="#1A0B10"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Spacing="0" VerticalAlignment="Center">
+              <TextBlock Text="妙妙短剧" Classes="tv-h1" />
+              <TextBlock Text="Android TV · 遥控器版" Classes="tv-muted" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                      HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Button x:Name="NavExploreButton" Classes="tv" Content="片库"
+                    Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Explore}" />
+            <Button Classes="tv" Content="搜索"
+                    Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Search}" />
+            <Button Classes="tv" Content="历史"
+                    Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.History}" />
+            <Button Classes="tv" Content="缓存"
+                    Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Downloads}" />
+            <Button Classes="tv" Content="设置"
+                    Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Settings}" />
+          </StackPanel>
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Ellipse Width="9" Height="9" Fill="#34D399" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding SourceStatusText}" Classes="tv-muted" MaxWidth="260"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="36,18,36,24">
+        <!-- Explore -->
+        <Grid IsVisible="{Binding IsExploreActive}" RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="tv" Content="全部" Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.All}" />
+              <Button Classes="tv" Content="真人剧" Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.RealDrama}" />
+              <Button Classes="tv" Content="漫剧" Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.ComicDrama}" />
+              <Button Classes="tv" Content="AI 剧" Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.AiDrama}" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding CatalogCountText}" Classes="tv-muted"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="2" Classes="tv" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
+          </Grid>
+
+          <Grid Grid.Row="1" Margin="0,14,0,0">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding ExploreRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,10">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" Spacing="14" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Button Classes="tv-card"
+                                  Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                                  CommandParameter="{Binding}">
+                            <StackPanel Width="216" Spacing="7">
+                              <controls:DramaCoverControl Width="216" Height="286"
+                                                          Drama="{Binding Drama}"
+                                                          CornerRadius="10" />
+                              <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
+                                         TextTrimming="CharacterEllipsis" MaxLines="1" />
+                              <TextBlock Text="{Binding StatusLabel}" Classes="tv-muted" />
+                            </StackPanel>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
+                        IsVisible="{Binding IsLoadingCatalog}">
+              <ProgressBar Width="220" Height="8" IsIndeterminate="True" Foreground="#FB7185" />
+              <TextBlock Text="正在加载片库..." Classes="tv-muted" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <Border IsVisible="{Binding HasCatalogError}" Background="#1A0E13" CornerRadius="14"
+                    Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+              <StackPanel Spacing="14">
+                <TextBlock Text="{Binding CatalogErrorTitle}" Classes="tv-h2" />
+                <TextBlock Text="{Binding CatalogErrorMessage}" Classes="tv-muted" TextWrapping="Wrap" />
+                <Button Classes="tv" Content="重试" Command="{Binding RefreshCatalogCommand}" />
+              </StackPanel>
+            </Border>
+          </Grid>
+        </Grid>
+
+        <!-- Search -->
+        <Grid IsVisible="{Binding IsSearchActive}" RowDefinitions="Auto,Auto,*">
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+            <TextBox Text="{Binding SearchQuery, Mode=TwoWay}" PlaceholderText="输入剧名或关键词"
+                     FontSize="20" Padding="14,10" CornerRadius="10"
+                     Background="#171D29" Foreground="#F8FAFC" BorderBrush="#2A3346" />
+            <Button Grid.Column="1" Classes="tv" Content="搜索" Command="{Binding ExecuteSearchCommand}" />
+            <Button Grid.Column="2" Classes="tv" Content="清除记录" Command="{Binding ClearRecentSearchCommand}"
+                    IsVisible="{Binding HasRecentSearches}" />
+          </Grid>
+
+          <ItemsControl Grid.Row="1" ItemsSource="{Binding RecentSearches}" Margin="0,12,0,0"
+                        IsVisible="{Binding HasRecentSearches}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Classes="tv" Content="{Binding}"
+                        Command="{Binding $parent[UserControl].DataContext.ApplySearchTagCommand}"
+                        CommandParameter="{Binding}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid Grid.Row="2" Margin="0,14,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding SearchRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,10">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" Spacing="14" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Button Classes="tv-card"
+                                  Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                                  CommandParameter="{Binding}">
+                            <StackPanel Width="250" Spacing="6">
+                              <controls:DramaCoverControl Width="250" Height="150"
+                                                          Drama="{Binding Drama}" CornerRadius="10" />
+                              <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
+                                         TextTrimming="CharacterEllipsis" MaxLines="1" />
+                              <TextBlock Text="{Binding TagsSummary}" Classes="tv-muted"
+                                         TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            </StackPanel>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="{Binding EmptySearchText}" Classes="tv-muted"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding ShowSearchEmpty}" />
+            <TextBlock Text="{Binding SearchErrorMessage}" Foreground="#FDA4AF"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding HasSearchError}" TextWrapping="Wrap" MaxWidth="600" />
+          </Grid>
+        </Grid>
+
+        <!-- History -->
+        <Grid IsVisible="{Binding IsHistoryActive}" RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="浏览历史" Classes="tv-h1" />
+            <Button Grid.Column="1" Classes="tv" Content="清空历史" Command="{Binding ClearHistoryCommand}" />
+          </Grid>
+          <ScrollViewer Grid.Row="1" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="18">
+              <StackPanel IsVisible="{Binding HasTodayHistory}" Spacing="10">
+                <TextBlock Text="今天" Classes="tv-h2" />
+                <ItemsControl ItemsSource="{Binding TodayHistory}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" ItemWidth="300" ItemHeight="112" /></ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Classes="tv-card" Margin="0,0,10,10"
+                              Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                              CommandParameter="{Binding Card}">
+                        <Grid ColumnDefinitions="78,*" ColumnSpacing="10" Width="286">
+                          <controls:DramaCoverControl Width="78" Height="100" Drama="{Binding Card.Drama}"
+                                                      CornerRadius="8" ShowBadges="False" ShowTextOverlay="False" />
+                          <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            <TextBlock Text="{Binding Subtitle}" Classes="tv-muted" TextWrapping="Wrap" />
+                          </StackPanel>
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding HasEarlierHistory}" Spacing="10">
+                <TextBlock Text="更早" Classes="tv-h2" />
+                <ItemsControl ItemsSource="{Binding EarlierHistory}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" ItemWidth="300" ItemHeight="112" /></ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Classes="tv-card" Margin="0,0,10,10"
+                              Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                              CommandParameter="{Binding Card}">
+                        <Grid ColumnDefinitions="78,*" ColumnSpacing="10" Width="286">
+                          <controls:DramaCoverControl Width="78" Height="100" Drama="{Binding Card.Drama}"
+                                                      CornerRadius="8" ShowBadges="False" ShowTextOverlay="False" />
+                          <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            <TextBlock Text="{Binding Subtitle}" Classes="tv-muted" TextWrapping="Wrap" />
+                          </StackPanel>
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <TextBlock Text="暂无观看记录" Classes="tv-muted" IsVisible="{Binding !HasAnyHistory}" />
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+
+        <!-- Downloads -->
+        <Grid IsVisible="{Binding IsDownloadsActive}" RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="离线缓存" Classes="tv-h1" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <Button Classes="tv" Content="{Binding ActiveDlTabText}" Command="{Binding SelectDownloadTabCommand}"
+                      CommandParameter="active" />
+              <Button Classes="tv" Content="{Binding DoneDlTabText}" Command="{Binding SelectDownloadTabCommand}"
+                      CommandParameter="done" />
+            </StackPanel>
+          </Grid>
+          <ScrollViewer Grid.Row="1" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
+            <Panel>
+              <ItemsControl ItemsSource="{Binding VisibleDownloads}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="#111722" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="12"
+                          Padding="14" Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="78,*,Auto" ColumnSpacing="14">
+                      <controls:DramaCoverControl Width="78" Height="100" Drama="{Binding Card.Drama}"
+                                                  CornerRadius="8" ShowBadges="False" ShowTextOverlay="False" />
+                      <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding StatusDetail}" Classes="tv-muted" />
+                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="6" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="tv" Content="{Binding ToggleLabel}"
+                                Command="{Binding $parent[UserControl].DataContext.ToggleDownloadPauseCommand}"
+                                CommandParameter="{Binding TaskId}" />
+                        <Button Classes="tv" Content="移除"
+                                Command="{Binding $parent[UserControl].DataContext.RemoveDownloadCommand}"
+                                CommandParameter="{Binding TaskId}" />
+                        <Button Classes="tv" Content="播放" IsVisible="{Binding IsCompleted}"
+                                Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                                CommandParameter="{Binding Card}" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding EmptyDownloadsText}" Classes="tv-muted"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding !HasVisibleDownloads}" />
+            </Panel>
+          </ScrollViewer>
+        </Grid>
+
+        <!-- Settings -->
+        <Grid IsVisible="{Binding IsSettingsActive}" RowDefinitions="Auto,*">
+          <TextBlock Text="设置" Classes="tv-h1" />
+          <ScrollViewer Grid.Row="1" Margin="0,16,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14" MaxWidth="900" HorizontalAlignment="Left">
+              <Border Background="#111722" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="10">
+                  <TextBlock Text="存储与服务" Classes="tv-h2" />
+                  <TextBlock Text="视频源服务地址" Classes="tv-muted" />
+                  <TextBox Text="{Binding GatewayBaseUrl, Mode=TwoWay}" PlaceholderText="http://gateway.example.com"
+                           FontSize="18" Padding="12,9" CornerRadius="8" Background="#171D29"
+                           Foreground="#F8FAFC" BorderBrush="#2A3346" />
+                  <TextBlock Text="访问令牌（如有）" Classes="tv-muted" />
+                  <TextBox Text="{Binding GatewayToken, Mode=TwoWay}" PasswordChar="*"
+                           FontSize="18" Padding="12,9" CornerRadius="8" Background="#171D29"
+                           Foreground="#F8FAFC" BorderBrush="#2A3346" />
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Classes="tv" Content="测试连接" Command="{Binding TestGatewayCommand}" />
+                    <Button Classes="tv" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding SourceStatusText}" Classes="tv-muted" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Background="#111722" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="12">
+                  <TextBlock Text="播放偏好" Classes="tv-h2" />
+                  <TextBlock Text="默认清晰度" Classes="tv-muted" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="tv" Content="1080P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="1080" />
+                    <Button Classes="tv" Content="720P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="720" />
+                    <Button Classes="tv" Content="480P" Command="{Binding SetDefaultQualityCommand}" CommandParameter="480" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock Text="自动连播下一集" Classes="tv-muted" VerticalAlignment="Center" />
+                    <ToggleSwitch IsChecked="{Binding AutoPlayNext, Mode=TwoWay}" OnContent="开" OffContent="关" />
+                  </StackPanel>
+                  <TextBlock Text="说明：电视端使用 Media3 ExoPlayer + PlayerView，由系统 MediaCodec 硬解，不加载 FFmpeg。"
+                             Classes="tv-muted" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Background="#111722" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="遥控器操作" Classes="tv-h2" />
+                  <TextBlock Text="方向键移动焦点 · 确定键播放/暂停或确认选择 · 播放页左右方向键快进快退 · 返回键退出播放"
+                             Classes="tv-muted" TextWrapping="Wrap" />
+                  <TextBlock Text="播放页可使用遥控器媒体键：播放/暂停、上一集、下一集。" Classes="tv-muted" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <!-- Player page -->
+    <Grid IsVisible="{Binding Player.IsOpen}" Background="#080A0F" RowDefinitions="76,*">
+      <Border Background="#10141D" BorderBrush="#1E2431" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="28,0" ColumnSpacing="18">
+          <Button x:Name="PlayerBackButton" Classes="tv"
+                  Click="OnClosePlayerClick" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource IconBack}" Width="12" Height="12" />
+              <TextBlock Text="返回" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Player.Title}" Classes="tv-h2" />
+            <TextBlock Text="{Binding Player.EpisodeBadgeText}" Classes="tv-muted" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Player.ResolutionLabel}" Classes="tv-muted" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Player.AspectLabel}" Classes="tv-muted" />
+            <TextBlock Text="{Binding Player.QualityLabel}" Classes="tv-muted" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" ColumnDefinitions="*,380" ColumnSpacing="18" Margin="28,18,28,22">
+        <Border Background="#05060A" CornerRadius="12" ClipToBounds="True" BorderBrush="#1F2937" BorderThickness="1">
+          <Grid>
+            <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}" CornerRadius="12"
+                                        BlurRadius="18" ShowBadges="False" ShowTextOverlay="False"
+                                        IsVisible="{Binding !Player.HasRealMediaUrl}" />
+            <Border Background="#40000000" IsVisible="{Binding !Player.HasRealMediaUrl}" />
+
+            <controls:Media3PlayerView x:Name="MediaPlayer"
+                                       IsVisible="{Binding Player.ShowNativeVideo}" />
+
+            <Border Background="#99000000" IsVisible="{Binding Player.IsResolvingStream}">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                <ProgressBar Width="240" Height="8" IsIndeterminate="True" Foreground="#FB7185" />
+                <TextBlock Text="正在加载剧集..." FontSize="18" />
+              </StackPanel>
+            </Border>
+
+            <Border Background="#CC080A0F" IsVisible="{Binding Player.HasStreamError}">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="560">
+                <TextBlock Text="{Binding Player.StreamErrorMessage}" FontSize="20" TextWrapping="Wrap"
+                           TextAlignment="Center" />
+                <Button Classes="tv" Content="重新加载" HorizontalAlignment="Center"
+                        Command="{Binding Player.RetryResolveCommand}" />
+              </StackPanel>
+            </Border>
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="14">
+            <TextBlock Text="播放控制" Classes="tv-h2" />
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+              <Button Classes="tv" Click="OnSeekBackClick">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                  <PathIcon Data="{StaticResource IconRewind10}" Width="14" Height="14" />
+                  <TextBlock Text="10秒" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="1" x:Name="PlayPauseButton" Classes="tv"
+                      Content="{Binding Player.PlayPauseLabel}"
+                      Command="{Binding Player.TogglePlayPauseCommand}" />
+              <Button Grid.Column="2" Classes="tv" Click="OnSeekForwardClick">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                  <TextBlock Text="10秒" VerticalAlignment="Center" />
+                  <PathIcon Data="{StaticResource IconForward10}" Width="14" Height="14" />
+                </StackPanel>
+              </Button>
+            </Grid>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+              <Button Classes="tv" Content="上一集" Command="{Binding Player.PreviousEpisodeCommand}" />
+              <Button Grid.Column="1" Classes="tv" Content="下一集" Command="{Binding Player.NextEpisodeCommand}" />
+            </Grid>
+            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Player.ProgressPercent}"
+                         Height="8" Foreground="#FB7185" Background="#1F2937" />
+            <TextBlock Text="{Binding Player.PositionText}" Classes="tv-muted" />
+
+            <TextBlock Text="{Binding Player.Synopsis}" Classes="tv-muted" TextWrapping="Wrap" MaxLines="3" />
+
+            <TextBlock Text="清晰度" Classes="tv-h2" />
+            <ItemsControl ItemsSource="{Binding Player.QualityOptions}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Classes="tv" Margin="0,0,8,8" Content="{Binding Label}"
+                          Command="{Binding $parent[UserControl].DataContext.Player.SelectQualityCommand}"
+                          CommandParameter="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="倍速" Classes="tv-h2" />
+            <ItemsControl ItemsSource="{Binding Player.SpeedOptions}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Classes="tv" Margin="0,0,8,8" Content="{Binding Label}"
+                          Command="{Binding $parent[UserControl].DataContext.Player.SelectSpeedCommand}"
+                          CommandParameter="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{Binding Player.TotalEpisodesText}" Classes="tv-h2" />
+            <ItemsControl ItemsSource="{Binding Player.EpisodeRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Classes="tv-episode" Classes.active="{Binding IsCurrent}"
+                                Margin="0,0,8,8" Content="{Binding Label}"
+                                Command="{Binding $parent[UserControl].DataContext.Player.SelectEpisodeCommand}"
+                                CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="方向键移动焦点 · 返回键退出播放 · 媒体键切换上下集"
+                       Classes="tv-muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

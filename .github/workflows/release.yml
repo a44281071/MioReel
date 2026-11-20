@@ -24,7 +24,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '11.0.x'
+          dotnet-version: '10.0.403'
 
       - name: Run Regression Tests
         run: dotnet run --project tests/MioReel.RegressionTests/MioReel.RegressionTests.csproj
@@ -49,7 +49,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '11.0.x'
+          dotnet-version: '10.0.403'
 
       - name: Install Linux NativeAOT Dependencies
         if: matrix.os == 'ubuntu-latest'
@@ -72,6 +72,7 @@ jobs:
         run: >
           dotnet publish src/MioReel.Desktop/MioReel.Desktop.csproj
           -c Release
+          -f net10.0
           -r ${{ matrix.rid }}
           -p:Version=${{ steps.ver.outputs.version }}
           -o publish/${{ matrix.rid }}
@@ -96,8 +97,64 @@ jobs:
           name: dist-${{ matrix.rid }}
           path: MioReel-*-${{ matrix.rid }}.${{ matrix.archive_ext }}
 
+  android-tv:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.403'
+
+      - name: Install Android Workload
+        run: dotnet workload install android
+
+      - name: Resolve Version
+        id: ver
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Android TV APK
+        shell: pwsh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $code = "${{ github.run_number }}"
+          if ($env:KEYSTORE_BASE64) {
+            [IO.File]::WriteAllBytes("$PWD\release.keystore", [Convert]::FromBase64String($env:KEYSTORE_BASE64))
+            ./scripts/publish-android-tv.ps1 -VersionName $version -VersionCode $code `
+              -KeystorePath .\release.keystore `
+              -KeystorePassword $env:KEYSTORE_PASSWORD `
+              -KeyAlias $env:KEY_ALIAS `
+              -KeyPassword $env:KEY_PASSWORD
+          } else {
+            ./scripts/publish-android-tv.ps1 -VersionName $version -VersionCode $code
+          }
+          Copy-Item `
+            src/MioReel.Desktop/bin/Release/net10.0-android36.0/publish/com.mioreel.tv-Signed.apk `
+            "MioReel-${{ steps.ver.outputs.tag }}-android-tv-armeabi-v7a.apk"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-android-tv
+          path: MioReel-*-android-tv-armeabi-v7a.apk
+
   release:
-    needs: publish
+    needs: [publish, android-tv]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -280,8 +280,14 @@ public sealed class PlayerViewModel : ReactiveObject
     public bool IsPlaying
     {
         get => _isPlaying;
-        set => this.RaiseAndSetIfChanged(ref _isPlaying, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isPlaying, value);
+            this.RaisePropertyChanged(nameof(PlayPauseLabel));
+        }
     }
+
+    public string PlayPauseLabel => IsPlaying ? "暂停" : "播放";
 
     public bool IsMiniMode
     {
@@ -396,6 +402,8 @@ public sealed class PlayerViewModel : ReactiveObject
             if (Math.Abs(_positionSeconds - value) < 0.05) return;
             this.RaiseAndSetIfChanged(ref _positionSeconds, value);
             this.RaisePropertyChanged(nameof(CurrentTimeText));
+            this.RaisePropertyChanged(nameof(PositionText));
+            this.RaisePropertyChanged(nameof(ProgressPercent));
             if (!_suppressSeekEvent && HasRealMediaUrl)
             {
                 var clamped = Math.Clamp(value, 0, Math.Max(0, DurationSeconds));
@@ -412,8 +420,16 @@ public sealed class PlayerViewModel : ReactiveObject
         {
             this.RaiseAndSetIfChanged(ref _durationSeconds, value);
             this.RaisePropertyChanged(nameof(DurationText));
+            this.RaisePropertyChanged(nameof(PositionText));
+            this.RaisePropertyChanged(nameof(ProgressPercent));
         }
     }
+
+    public string PositionText => $"{CurrentTimeText} / {DurationText}";
+
+    public double ProgressPercent => DurationSeconds > 0
+        ? Math.Clamp(PositionSeconds / DurationSeconds * 100.0, 0.0, 100.0)
+        : 0.0;
 
     public bool HasRealMediaUrl
     {
@@ -422,6 +438,7 @@ public sealed class PlayerViewModel : ReactiveObject
         {
             if (_hasRealMediaUrl == value) return;
             this.RaiseAndSetIfChanged(ref _hasRealMediaUrl, value);
+            this.RaisePropertyChanged(nameof(ShowNativeVideo));
             RaiseDanmakuSurfaceProperties();
         }
     }
@@ -439,10 +456,17 @@ public sealed class PlayerViewModel : ReactiveObject
         {
             this.RaiseAndSetIfChanged(ref _streamErrorMessage, value);
             this.RaisePropertyChanged(nameof(HasStreamError));
+            this.RaisePropertyChanged(nameof(ShowNativeVideo));
         }
     }
 
     public bool HasStreamError => !string.IsNullOrWhiteSpace(StreamErrorMessage);
+
+    /// <summary>
+    /// True when the native player surface should be visible. Errors must hide it,
+    /// because native views are drawn above the Avalonia error overlay.
+    /// </summary>
+    public bool ShowNativeVideo => HasRealMediaUrl && !HasStreamError;
 
     public string Title => CurrentDrama?.Title ?? string.Empty;
     public string Synopsis => CurrentDrama?.Intro ?? string.Empty;
@@ -1137,6 +1161,8 @@ public sealed class PlayerViewModel : ReactiveObject
                 _positionSeconds = posSec;
                 this.RaisePropertyChanged(nameof(PositionSeconds));
                 this.RaisePropertyChanged(nameof(CurrentTimeText));
+                this.RaisePropertyChanged(nameof(PositionText));
+                this.RaisePropertyChanged(nameof(ProgressPercent));
             }
         }
         finally

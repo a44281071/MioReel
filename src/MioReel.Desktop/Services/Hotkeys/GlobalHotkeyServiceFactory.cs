@@ -32,12 +32,14 @@ public static class GlobalHotkeyServiceFactory
 {
     public static IGlobalHotkeyService Create()
     {
+#if !ANDROID
         if (OperatingSystem.IsWindows())
             return new WindowsGlobalHotkeyService();
 
         if (OperatingSystem.IsLinux())
             return new LinuxX11GlobalHotkeyService();
+#endif
 
-        return new NullGlobalHotkeyService("当前系统暂不支持内置全局热键，窗口内快捷键可正常使用");
+        return new NullGlobalHotkeyService("电视端不支持系统全局热键，播放页可使用遥控器快捷键");
     }
 }

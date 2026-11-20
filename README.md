@@ -48,3 +48,54 @@
 1. 启动客户端后，进入 **设置 → 存储与服务** 填写视频源服务地址与访问令牌（如有），点击 **连接并同步** 即可开看（也支持通过环境变量 `MIOREEL_GATEWAY_URL`、`MIOREEL_GATEWAY_TOKEN` 预设）。
 2. 在播放页点击 **缓存** 可将剧集下载到本地目录；离线剧集可在 **离线下载 → 已完成** 中直接播放。
 3. 在 **设置 → 快捷键与全局热键** 中可自定义老板键与各类播放快捷键。
+
+---
+
+## 📺 Android TV 版（armeabi-v7a）
+
+电视端复用桌面端的片库 / 历史 / 下载 / 设置逻辑，只替换窗口层与播放器：
+
+- **播放器**：AndroidX Media3 `ExoPlayer` + `PlayerView`，由系统 `MediaCodec` 硬解，APK 内**不包含 FFmpeg / FrameFlux**。
+- **界面**：Avalonia 单页 TV 布局，方向键移动焦点，确定键执行，返回键逐级返回/退出播放。
+- **移除的桌面能力**：标题栏、迷你窗/窗口置顶、Win32 窗口切换、系统全局热键。
+- **输出**：仅 `armeabi-v7a`（32 位 ARM）APK，包名 `com.mioreel.tv`，minSdk 24、targetSdk 36，支持 Leanback 启动器与 TV banner。
+
+### 构建
+
+需要 .NET SDK `10.0.403`（`global.json` 已固定）以及 Android SDK 36。
+
+```powershell
+./scripts/publish-android-tv.ps1
+# 或手动执行
+dotnet publish src/MioReel.Desktop/MioReel.Desktop.csproj -c Release -f net10.0-android36.0 -p:AndroidPackageFormat=apk
+```
+
+产物：`src/MioReel.Desktop/bin/Release/net10.0-android36.0/publish/com.mioreel.tv-Signed.apk`
+
+> 不要给 `dotnet publish` 追加 `-r android-arm`。多目标还原会把它套用到桌面 TFM，进而要求并不存在的 `Microsoft.NETCore.App.Runtime.linux-bionic-arm`。ABI 由 Android TFM 的 `RuntimeIdentifiers` 控制。
+
+### 签名
+
+不传签名参数时使用本机 debug key 签名，可直接 `adb install` 侧载测试。正式发布时：
+
+```powershell
+./scripts/publish-android-tv.ps1 `
+  -KeystorePath .\release.keystore `
+  -KeystorePassword '***' `
+  -KeyAlias mioreel `
+  -KeyPassword '***'
+```
+
+GitHub Actions 的 Release 工作流会自动构建 TV APK。若仓库配置了
+`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、
+`ANDROID_KEY_PASSWORD` 四个 secrets，则使用正式签名；否则回退为 debug 签名。
+
+### 遥控器操作
+
+- 方向键移动焦点；确定键执行当前按钮（播放页的确定键即播放/暂停）。
+- 播放页：返回键退出播放；左右方向键快退/快进 10 秒；媒体键支持播放/暂停、上一集/下一集、快退/快进。
+- 搜索页会调起 Android 输入法，建议使用带键盘或语音输入的遥控器。
+
+### 首次使用
+
+与桌面端一致：进入 **设置** 填写视频源地址与访问令牌（也可通过 `MIOREEL_GATEWAY_URL`、`MIOREEL_GATEWAY_TOKEN` 环境变量预设），随后刷新片库即可。
