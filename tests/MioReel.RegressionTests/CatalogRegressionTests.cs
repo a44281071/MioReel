@@ -40,7 +40,7 @@ internal static class CatalogRegressionTests
         });
         var source = new CatalogSource((_, page, _) => Task.FromResult(new CatalogPageResult(
             page == 1 ? Items(1, 60).Concat(Items(1, 3)).ToList() : Items(50, 30), page == 1, true)));
-        var vm = Create(source);
+        var vm = CreateCategory(source);
         await WaitUntil(() => !vm.IsLoadingCatalog);
         Assert(vm.ExploreCards.Count == 60, "片库首屏过滤同页重复剧目");
         await vm.LoadMoreCatalogCommand.Execute().ToTask();
@@ -53,7 +53,7 @@ internal static class CatalogRegressionTests
         source = new CatalogSource((_, page, _) => page == 1
             ? Task.FromResult(new CatalogPageResult(Items(1, 30), true, true))
             : pendingPage.Task);
-        vm = Create(source);
+        vm = CreateCategory(source);
         await WaitUntil(() => source.Requests.Count == 2);
         var more = vm.LoadMoreCatalogCommand.Execute().ToTask();
         Assert(source.Requests.Count(x => x.Page == 2) == 1, "首屏预取期间加载更多不会重复请求同页");
@@ -70,7 +70,7 @@ internal static class CatalogRegressionTests
             : ++firstPageRequests == 1
                 ? Task.FromResult(new CatalogPageResult(Items(1, 60), true, true))
                 : refreshedPage.Task);
-        vm = Create(source);
+        vm = CreateCategory(source);
         more = vm.LoadMoreCatalogCommand.Execute().ToTask();
         await vm.LoadMoreCatalogCommand.Execute().ToTask();
         Assert(source.Requests.Count(x => x.Page == 2) == 1, "连续触发加载更多只发送一次分页请求");
@@ -84,6 +84,33 @@ internal static class CatalogRegressionTests
         await refresh;
         Assert(vm.ExploreCards.Select(x => x.Drama.SeriesId).SequenceEqual(Items(101, 60).Select(x => x.SeriesId)), "刷新后丢弃旧分页响应");
         AssertRows(vm, "刷新后的显示行只包含新列表");
+
+        var home = new HomeSource();
+        vm = Create(home);
+        await vm.SelectHomeTabCommand.Execute(HomeTab.Recommend).ToTask();
+        await WaitUntil(() => !vm.IsLoadingCatalog
+            && vm.SelectedHomeTab == HomeTab.Recommend
+            && vm.ExploreCards.Count == 24);
+        Assert(vm.ExploreCards.Count == 24, "推荐流首屏加载");
+        await vm.LoadMoreCatalogCommand.Execute().ToTask();
+        Assert(vm.ExploreCards.Count == 48, "推荐流滚动加载下一页");
+        Assert(home.FeedRequests.Any(x => x.Page == 2 && x.Scope == "scope-1"), "推荐流翻页回传 scope 游标");
+
+        await vm.SelectHomeTabCommand.Execute(HomeTab.Category).ToTask();
+        Assert(vm.SelectedHomeTab == HomeTab.Category && vm.ExploreCards.Count == 3, "切换到分类栏目加载分类剧目");
+
+        await vm.SelectHomeTabCommand.Execute(HomeTab.Ranking).ToTask();
+        Assert(vm.SelectedHomeTab == HomeTab.Ranking
+            && vm.RankingBoards.Count == 2
+            && vm.SelectedRankingBoardId == "board-1"
+            && vm.ExploreCards.Count == 5, "榜单栏目加载榜单并默认选中首个榜单");
+
+        var secondBoard = vm.RankingBoards[1];
+        await vm.SelectRankingBoardCommand.Execute(secondBoard).ToTask();
+        Assert(secondBoard.IsSelected
+            && vm.SelectedRankingBoardId == "board-2"
+            && vm.ExploreCards.Count == 4, "切换榜单后加载对应榜单内容");
+
         vm = Create(source, settings);
         vm.DefaultQuality = 720;
         Assert(settings.Current.NormalWindow?.X == 100 && settings.Current.MiniWindow?.X == 1500, "修改画质设置不会覆盖大小窗各自的位置记录");
@@ -118,6 +145,13 @@ internal static class CatalogRegressionTests
         var corner2 = WindowPlacementPolicy.SnapMiniDimensions(
             371, 643, WindowPlacementPolicy.EdgeBottomRight, 288, 512, 607, 1080, 9.0 / 16.0);
         Assert(corner2.ClientWidth >= corner1.ClientWidth && corner2.ClientHeight >= corner1.ClientHeight, "拖动小窗角点连续放大保持单调递增不抖动");
+    }
+
+    private static MainWindowViewModel CreateCategory(IDramaCatalogService source, ISettingsService? settingsOverride = null)
+    {
+        var vm = Create(source, settingsOverride);
+        _ = vm.SelectHomeTabCommand.Execute(HomeTab.Category).ToTask();
+        return vm;
     }
 
     private static MainWindowViewModel Create(IDramaCatalogService source, ISettingsService? settingsOverride = null)
@@ -155,6 +189,47 @@ internal static class CatalogRegressionTests
         public Task<Uri> PreparePlayableUriAsync(ResolvedStreamInfo stream, CancellationToken ct = default) => throw new NotSupportedException();
         public void ReleaseSession(Uri? uri) { }
         public void Dispose() { }
+    }
+
+    private sealed class HomeSource : IDramaCatalogService
+    {
+        public List<(string Scope, int Page)> FeedRequests { get; } = [];
+        public List<(string Board, int Page)> RankingRequests { get; } = [];
+        public bool IsLastRequestLive => true;
+
+        public Task<FeedPageResult> GetFeedPageAsync(string scope, int page = 1, int limit = 40, CancellationToken ct = default)
+        {
+            FeedRequests.Add((scope, page));
+            return Task.FromResult(page switch
+            {
+                1 => new FeedPageResult(Items(1, 24), true, "scope-1", true),
+                _ => new FeedPageResult(Items(25, 24), false, "scope-1", true)
+            });
+        }
+
+        public Task<CatalogPageResult> GetCatalogPageAsync(DramaCategory category, int page = 1, int limit = 40, CancellationToken ct = default)
+            => Task.FromResult(new CatalogPageResult(Items(100, 3), false, true));
+
+        public Task<IReadOnlyList<RankingBoardItem>> GetRankingBoardsAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<RankingBoardItem>>(
+            [
+                new("board-1", "热播榜", "全站热播", "hongguo"),
+                new("board-2", "新剧榜", "最新上线", "hongguo")
+            ]);
+
+        public Task<CatalogPageResult> GetRankingPageAsync(string boardId, int page = 1, int limit = 40, CancellationToken ct = default)
+        {
+            RankingRequests.Add((boardId, page));
+            return Task.FromResult(boardId == "board-2"
+                ? new CatalogPageResult(Items(300, 4), false, true)
+                : new CatalogPageResult(Items(200, 5), false, true));
+        }
+
+        public Task<IReadOnlyList<DramaItem>> GetCatalogAsync(DramaCategory category, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<EpisodeItem>> GetEpisodesAsync(string seriesId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ResolvedStreamInfo> ResolveEpisodeAsync(string seriesId, int episodeNo, int quality = 1080, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<GatewayHealthResult> TestConnectionAsync(string gatewayBaseUrl, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class CatalogSource(Func<DramaCategory, int, CancellationToken, Task<CatalogPageResult>> load) : IDramaCatalogService

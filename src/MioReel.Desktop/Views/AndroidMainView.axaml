@@ -21,6 +21,12 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <Style Selector="Button.tv.active">
+      <Setter Property="Background" Value="#3A1722" />
+      <Setter Property="BorderBrush" Value="#FB7185" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
     <Style Selector="Button.tv:focus">
       <Setter Property="Background" Value="#2B1722" />
       <Setter Property="BorderBrush" Value="#FB7185" />
@@ -46,7 +52,7 @@
       <Setter Property="BorderThickness" Value="3" />
     </Style>
     <Style Selector="Button.tv-card-compact">
-      <Setter Property="Width" Value="130" />
+      <Setter Property="Width" Value="118" />
       <Setter Property="Padding" Value="4" />
     </Style>
     <Style Selector="Button.tv-episode">
@@ -81,7 +87,7 @@
 
   <Grid>
     <!-- Browse shell -->
-    <Grid RowDefinitions="60,*" IsVisible="{Binding !Player.IsOpen}">
+    <Grid RowDefinitions="56,*" IsVisible="{Binding !Player.IsOpen}">
       <Border Background="#10141D" BorderBrush="#1E2431" BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,*,Auto" Margin="24,0">
           <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -117,26 +123,68 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="24,8,24,10">
+      <Grid Grid.Row="1" Margin="24,6,24,8">
         <!-- Explore -->
-        <Grid IsVisible="{Binding IsExploreActive}" RowDefinitions="Auto,*">
+        <Grid IsVisible="{Binding IsExploreActive}" RowDefinitions="Auto,Auto,*">
           <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <Button Classes="tv tv-compact" Content="全部" Command="{Binding SelectCategoryCommand}"
-                      CommandParameter="{x:Static models:DramaCategory.All}" />
-              <Button Classes="tv tv-compact" Content="真人剧" Command="{Binding SelectCategoryCommand}"
-                      CommandParameter="{x:Static models:DramaCategory.RealDrama}" />
-              <Button Classes="tv tv-compact" Content="漫剧" Command="{Binding SelectCategoryCommand}"
-                      CommandParameter="{x:Static models:DramaCategory.ComicDrama}" />
-              <Button Classes="tv tv-compact" Content="AI 剧" Command="{Binding SelectCategoryCommand}"
-                      CommandParameter="{x:Static models:DramaCategory.AiDrama}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsRecommendHome}" Content="推荐"
+                      Command="{Binding SelectHomeTabCommand}"
+                      CommandParameter="{x:Static vm:HomeTab.Recommend}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsCategoryHome}" Content="分类"
+                      Command="{Binding SelectHomeTabCommand}"
+                      CommandParameter="{x:Static vm:HomeTab.Category}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsRankingHome}" Content="榜单"
+                      Command="{Binding SelectHomeTabCommand}"
+                      CommandParameter="{x:Static vm:HomeTab.Ranking}" />
             </StackPanel>
-            <TextBlock Grid.Column="1" Text="{Binding CatalogCountText}" Classes="tv-muted"
-                       FontSize="14" VerticalAlignment="Center" />
-            <Button Grid.Column="2" Classes="tv tv-compact" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
+            <TextBlock Grid.Column="1" Text="{Binding HomeTabHint}" Classes="tv-muted"
+                       FontSize="13" VerticalAlignment="Center" Margin="4,0,0,0"
+                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="{Binding CatalogCountText}" Classes="tv-muted"
+                         FontSize="14" VerticalAlignment="Center" />
+              <Button Classes="tv tv-compact" Content="{Binding RefreshButtonText}" Command="{Binding RefreshCatalogCommand}" />
+            </StackPanel>
           </Grid>
 
-          <Grid Grid.Row="1" Margin="0,6,0,0">
+          <Grid Grid.Row="1" Margin="0,4,0,0" IsVisible="{Binding ShowContextFilters}">
+            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsCategoryHome}">
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsAllCategory}" Content="全部"
+                      Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.All}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsRealCategory}" Content="真人剧"
+                      Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.RealDrama}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsComicCategory}" Content="漫剧"
+                      Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.ComicDrama}" />
+              <Button Classes="tv tv-compact" Classes.active="{Binding IsAiCategory}" Content="AI 剧"
+                      Command="{Binding SelectCategoryCommand}"
+                      CommandParameter="{x:Static models:DramaCategory.AiDrama}" />
+            </StackPanel>
+
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          IsVisible="{Binding IsRankingHome}">
+              <ItemsControl ItemsSource="{Binding RankingBoards}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Button Classes="tv tv-compact" Classes.active="{Binding IsSelected}"
+                            Content="{Binding Name}"
+                            Command="{Binding $parent[UserControl].DataContext.SelectRankingBoardCommand}"
+                            CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Grid>
+
+          <Grid Grid.Row="2" Margin="0,4,0,0">
             <ItemsControl x:Name="ExploreVirtualizedList"
                           Classes="virtual-list"
                           ItemsSource="{Binding ExploreRows}"
@@ -154,9 +202,9 @@
                         <Button Classes="tv-card tv-card-compact" Margin="0,0,8,8"
                                 Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
                                 CommandParameter="{Binding}">
-                          <StackPanel Width="116" Spacing="4">
-                            <Grid Width="116" Height="155">
-                              <controls:DramaCoverControl Width="116" Height="155"
+                          <StackPanel Width="105" Spacing="4">
+                            <Grid Width="105" Height="140">
+                              <controls:DramaCoverControl Width="105" Height="140"
                                                           Drama="{Binding Drama}"
                                                           CornerRadius="8"
                                                           ShowBadges="False"
@@ -181,7 +229,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
                         IsVisible="{Binding IsLoadingCatalog}">
               <ProgressBar Width="220" Height="8" IsIndeterminate="True" Foreground="#FB7185" />
-              <TextBlock Text="正在加载片库..." Classes="tv-muted" HorizontalAlignment="Center" />
+              <TextBlock Text="正在加载内容..." Classes="tv-muted" HorizontalAlignment="Center" />
             </StackPanel>
 
             <Border IsVisible="{Binding HasCatalogError}" Background="#1A0E13" CornerRadius="14"
@@ -191,6 +239,11 @@
                 <TextBlock Text="{Binding CatalogErrorMessage}" Classes="tv-muted" TextWrapping="Wrap" />
                 <Button Classes="tv" Content="重试" Command="{Binding RefreshCatalogCommand}" />
               </StackPanel>
+            </Border>
+
+            <Border IsVisible="{Binding ShowExploreEmpty}" Background="#111722" CornerRadius="14"
+                    Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+              <TextBlock Text="{Binding EmptyCatalogText}" Classes="tv-muted" TextWrapping="Wrap" />
             </Border>
           </Grid>
         </Grid>
@@ -395,7 +448,7 @@
                            Foreground="#F8FAFC" BorderBrush="#2A3346" />
                   <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Classes="tv" Content="测试连接" Command="{Binding TestGatewayCommand}" />
-                    <Button Classes="tv" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
+                    <Button Classes="tv" Content="刷新内容" Command="{Binding RefreshCatalogCommand}" />
                   </StackPanel>
                   <TextBlock Text="{Binding SourceStatusText}" Classes="tv-muted" TextWrapping="Wrap" />
                 </StackPanel>

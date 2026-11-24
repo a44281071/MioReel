@@ -36,6 +36,23 @@ public sealed record GatewaySearchData(
     [property: JsonPropertyName("total")] int Total,
     [property: JsonPropertyName("list")] IReadOnlyList<GatewayCatalogItem> List);
 
+public sealed record GatewayFeedData(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_count")] int PageCount,
+    [property: JsonPropertyName("has_more")] bool HasMore,
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("total")] int Total,
+    [property: JsonPropertyName("list")] IReadOnlyList<GatewayCatalogItem> List);
+
+public sealed record GatewayRankingBoardsData(
+    [property: JsonPropertyName("items")] IReadOnlyList<GatewayRankingBoard> Items);
+
+public sealed record GatewayRankingBoard(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("source")] string Source);
+
 public sealed record GatewayHealthResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("version")] string Version,
@@ -101,6 +118,8 @@ public sealed record GatewayDanmakuItem(
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(GatewayEnvelope<GatewayCatalogData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewaySearchData>))]
+[JsonSerializable(typeof(GatewayEnvelope<GatewayFeedData>))]
+[JsonSerializable(typeof(GatewayEnvelope<GatewayRankingBoardsData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewaySeriesData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewayResolveData>))]
 [JsonSerializable(typeof(GatewayEnvelope<GatewayDanmakuData>))]

@@ -15,6 +15,16 @@ public enum NavSection
     Settings
 }
 
+/// <summary>
+/// 片库首页的三个内容入口：推荐流、分类剧目、官方榜单。
+/// </summary>
+public enum HomeTab
+{
+    Recommend,
+    Category,
+    Ranking
+}
+
 public sealed class NavItemViewModel(NavSection section, string label, string shortLabel, string pathData)
 {
     public NavSection Section { get; } = section;
@@ -155,6 +165,22 @@ public sealed class BatchDownloadDialogViewModel : ReactiveObject
 public sealed class DramaCardRowViewModel(IEnumerable<DramaCardViewModel> items)
 {
     public ObservableCollection<DramaCardViewModel> Items { get; } = [.. items];
+}
+
+public sealed class RankingBoardViewModel(string id, string name, string description) : ReactiveObject
+{
+    private bool _isSelected;
+
+    public string Id { get; } = id;
+    public string Name { get; } = name;
+    public string Description { get; } = description;
+    public string ToolTipText => string.IsNullOrWhiteSpace(Description) ? Name : $"{Name}：{Description}";
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
 }
 
 public sealed class HistoryRowEntry

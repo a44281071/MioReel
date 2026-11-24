@@ -176,6 +176,24 @@ public sealed record CatalogPageResult(
     bool HasMore,
     bool IsLiveGateway);
 
+/// <summary>
+/// 首页推荐流分页结果；Scope 是不透明游标，翻页时必须原样回传给网关。
+/// </summary>
+public sealed record FeedPageResult(
+    IReadOnlyList<DramaItem> Items,
+    bool HasMore,
+    string Scope,
+    bool IsLiveGateway);
+
+/// <summary>
+/// 网关官方榜单条目；Id 为不透明标识，请求榜单内容时原样回传。
+/// </summary>
+public sealed record RankingBoardItem(
+    string Id,
+    string Name,
+    string Description,
+    string Source);
+
 public sealed record GatewayHealthResult(
     bool IsHealthy,
     string Message,
@@ -188,19 +206,22 @@ public sealed class GatewayException : Exception
         int? errorCode = null,
         string? requestId = null,
         Exception? inner = null,
-        GatewayFailureKind failureKind = GatewayFailureKind.GatewayError)
+        GatewayFailureKind failureKind = GatewayFailureKind.GatewayError,
+        int? httpStatus = null)
         : base(userMessage, inner)
     {
         UserMessage = userMessage;
         ErrorCode = errorCode;
         RequestId = requestId;
         FailureKind = failureKind;
+        HttpStatus = httpStatus;
     }
 
     public string UserMessage { get; }
     public int? ErrorCode { get; }
     public string? RequestId { get; }
     public GatewayFailureKind FailureKind { get; }
+    public int? HttpStatus { get; }
 }
 
 /// <summary>

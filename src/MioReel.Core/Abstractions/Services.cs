@@ -7,6 +7,12 @@ public interface IDramaCatalogService
     bool IsLastRequestLive { get; }
     Task<CatalogPageResult> GetCatalogPageAsync(DramaCategory category, int page = 1, int limit = 40, CancellationToken ct = default);
     Task<IReadOnlyList<DramaItem>> GetCatalogAsync(DramaCategory category, CancellationToken ct = default);
+    Task<FeedPageResult> GetFeedPageAsync(string scope, int page = 1, int limit = 40, CancellationToken ct = default) =>
+        Task.FromResult(new FeedPageResult([], false, string.Empty, false));
+    Task<IReadOnlyList<RankingBoardItem>> GetRankingBoardsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<RankingBoardItem>>([]);
+    Task<CatalogPageResult> GetRankingPageAsync(string boardId, int page = 1, int limit = 40, CancellationToken ct = default) =>
+        Task.FromResult(new CatalogPageResult([], false, false));
     Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default);
     Task<IReadOnlyList<EpisodeItem>> GetEpisodesAsync(string seriesId, CancellationToken ct = default);
     Task<ResolvedStreamInfo> ResolveEpisodeAsync(string seriesId, int episodeNo, int quality = 1080, CancellationToken ct = default);

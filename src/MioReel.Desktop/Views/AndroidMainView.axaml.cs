@@ -54,6 +54,7 @@ public partial class AndroidMainView : UserControl
 
         ExploreVirtualizedList.TemplateApplied += (_, _) => AttachExploreScrollViewer();
         ExploreVirtualizedList.Loaded += (_, _) => AttachExploreScrollViewer();
+        ExploreVirtualizedList.SizeChanged += (_, _) => UpdateExploreColumns();
         AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key is Key.Down or Key.PageDown or Key.End or Key.Space)
@@ -146,7 +147,7 @@ public partial class AndroidMainView : UserControl
         var width = ExploreVirtualizedList.Bounds.Width;
         if (width <= 0)
             return;
-        _viewModel.UpdateExploreColumns(width, 130, 8);
+        _viewModel.UpdateExploreColumns(width, 118, 8);
     }
 
     private void RequestExplorePrefetch()
@@ -211,7 +212,9 @@ public partial class AndroidMainView : UserControl
             _explorePrefetchGate.ConsumeRequest();
         }
 
-        if (e.PropertyName == nameof(MainWindowViewModel.SelectedCategory))
+        if (e.PropertyName is nameof(MainWindowViewModel.SelectedCategory)
+            or nameof(MainWindowViewModel.SelectedHomeTab)
+            or nameof(MainWindowViewModel.SelectedRankingBoardId))
         {
             Dispatcher.UIThread.Post(() =>
             {
@@ -223,7 +226,9 @@ public partial class AndroidMainView : UserControl
         if (e.PropertyName is nameof(MainWindowViewModel.IsLoadingCatalog)
             or nameof(MainWindowViewModel.IsLoadingMoreCatalog)
             or nameof(MainWindowViewModel.HasMoreCatalog)
-            or nameof(MainWindowViewModel.SelectedCategory))
+            or nameof(MainWindowViewModel.SelectedCategory)
+            or nameof(MainWindowViewModel.SelectedHomeTab)
+            or nameof(MainWindowViewModel.SelectedRankingBoardId))
         {
             if (e.PropertyName is nameof(MainWindowViewModel.IsLoadingCatalog)
                 or nameof(MainWindowViewModel.HasMoreCatalog))

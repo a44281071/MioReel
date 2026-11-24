@@ -14,6 +14,9 @@ namespace MioReel.Infrastructure.Services;
 /// </summary>
 public sealed class GatewayDramaCatalogService : IDramaCatalogService
 {
+    private const string CatalogRecommendScope = "__catalog_recommend__";
+    private const string CatalogHotBoardPrefix = "catalog-hot:";
+
     private static readonly (string Primary, string Secondary)[] AccentPalettes =
     [
         ("#BE123C", "#F59E0B"),
@@ -24,6 +27,16 @@ public sealed class GatewayDramaCatalogService : IDramaCatalogService
         ("#065F46", "#10B981"),
         ("#1D4ED8", "#06B6D4"),
         ("#0F172A", "#38BDF8")
+    ];
+
+    // Older gateway deployments expose recommendation/ranking via catalog sort
+    // instead of the dedicated /feed and /rankings routes.
+    private static readonly RankingBoardItem[] CatalogFallbackRankingBoards =
+    [
+        new($"{CatalogHotBoardPrefix}all", "全站热播", "全站短剧热播榜", "hongguo"),
+        new($"{CatalogHotBoardPrefix}real-drama", "真人剧热播", "真人短剧热播榜", "hongguo"),
+        new($"{CatalogHotBoardPrefix}comic-drama", "漫剧热播", "漫剧热播榜", "hongguo"),
+        new($"{CatalogHotBoardPrefix}ai-drama", "AI 剧热播", "AI 短剧热播榜", "hongguo")
     ];
 
     private readonly HttpClient _http;
@@ -63,6 +76,130 @@ public sealed class GatewayDramaCatalogService : IDramaCatalogService
     {
         var page = await GetCatalogPageAsync(category, 1, 100, ct);
         return page.Items;
+    }
+
+    public async Task<FeedPageResult> GetFeedPageAsync(
+        string scope,
+        int page = 1,
+        int limit = 40,
+        CancellationToken ct = default)
+    {
+        var safePage = Math.Max(1, page);
+        var safeLimit = Math.Clamp(limit, 1, 100);
+        var trimmedScope = scope?.Trim() ?? string.Empty;
+        if (string.Equals(trimmedScope, CatalogRecommendScope, StringComparison.Ordinal))
+            return await GetCatalogRecommendFallbackAsync(safePage, safeLimit, ct);
+
+        if (safePage > 1 && string.IsNullOrEmpty(trimmedScope))
+        {
+            throw new GatewayException(
+                "推荐流游标已失效，请刷新推荐后重试",
+                failureKind: GatewayFailureKind.GatewayError);
+        }
+
+        var path = $"/api/v1/feed?page={safePage}&limit={safeLimit}";
+        if (!string.IsNullOrEmpty(trimmedScope))
+            path += $"&scope={Uri.EscapeDataString(trimmedScope)}";
+
+        try
+        {
+            var data = await SendEnvelopeAsync(
+                HttpMethod.Get,
+                path,
+                MioReelJsonContext.Default.GatewayEnvelopeGatewayFeedData,
+                content: null,
+                ct);
+
+            var mapped = (data.List ?? [])
+                .Select(item => MapCatalogItem(item, DramaCategory.All))
+                .ToList();
+            IsLastRequestLive = true;
+            return new FeedPageResult(
+                mapped,
+                HasMore: data.HasMore && mapped.Count > 0,
+                Scope: string.IsNullOrWhiteSpace(data.Scope) ? trimmedScope : data.Scope,
+                IsLiveGateway: true);
+        }
+        catch (GatewayException ex) when (ex.HttpStatus == (int)HttpStatusCode.NotFound)
+        {
+            return await GetCatalogRecommendFallbackAsync(safePage, safeLimit, ct);
+        }
+    }
+
+    public async Task<IReadOnlyList<RankingBoardItem>> GetRankingBoardsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var data = await SendEnvelopeAsync(
+                HttpMethod.Get,
+                "/api/v1/rankings/boards",
+                MioReelJsonContext.Default.GatewayEnvelopeGatewayRankingBoardsData,
+                content: null,
+                ct);
+
+            IsLastRequestLive = true;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var boards = (data.Items ?? [])
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id) && !string.IsNullOrWhiteSpace(item.Name))
+                .Where(item => seen.Add(item.Id.Trim()))
+                .Select(item => new RankingBoardItem(
+                    Id: item.Id.Trim(),
+                    Name: item.Name.Trim(),
+                    Description: item.Description ?? string.Empty,
+                    Source: string.IsNullOrWhiteSpace(item.Source) ? "hongguo" : item.Source.Trim()))
+                .ToList();
+            return boards.Count > 0 ? boards : CatalogFallbackRankingBoards;
+        }
+        catch (GatewayException ex) when (ex.HttpStatus == (int)HttpStatusCode.NotFound)
+        {
+            // Older gateways expose the same content through catalog?sort=hot.
+            IsLastRequestLive = true;
+            return CatalogFallbackRankingBoards;
+        }
+    }
+
+    public async Task<CatalogPageResult> GetRankingPageAsync(
+        string boardId,
+        int page = 1,
+        int limit = 40,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(boardId))
+        {
+            throw new GatewayException(
+                "榜单标识无效，请刷新榜单列表后重试",
+                failureKind: GatewayFailureKind.GatewayError);
+        }
+
+        var trimmedBoardId = boardId.Trim();
+        var safePage = Math.Max(1, page);
+        var safeLimit = Math.Clamp(limit, 1, 100);
+        if (trimmedBoardId.StartsWith(CatalogHotBoardPrefix, StringComparison.Ordinal))
+        {
+            var categorySlug = trimmedBoardId[CatalogHotBoardPrefix.Length..];
+            return await GetSortedCatalogPageAsync(
+                categorySlug,
+                "hot",
+                safePage,
+                safeLimit,
+                CategoryFromSlug(categorySlug),
+                ct);
+        }
+
+        var path = $"/api/v1/rankings?board={Uri.EscapeDataString(trimmedBoardId)}&page={safePage}&limit={safeLimit}";
+        var data = await SendEnvelopeAsync(
+            HttpMethod.Get,
+            path,
+            MioReelJsonContext.Default.GatewayEnvelopeGatewayCatalogData,
+            content: null,
+            ct);
+
+        var mapped = (data.List ?? [])
+            .Select(item => MapCatalogItem(item, DramaCategory.All))
+            .ToList();
+        var hasMore = mapped.Count > 0 && data.PageCount > safePage;
+        IsLastRequestLive = true;
+        return new CatalogPageResult(mapped, hasMore, IsLiveGateway: true);
     }
 
     public async Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default)
@@ -315,6 +452,56 @@ public sealed class GatewayDramaCatalogService : IDramaCatalogService
         }
     }
 
+    private async Task<FeedPageResult> GetCatalogRecommendFallbackAsync(
+        int page,
+        int limit,
+        CancellationToken ct)
+    {
+        // Older gateways map recommendation pages through catalog?sort=recommend.
+        var result = await GetSortedCatalogPageAsync(
+            "all",
+            "recommend",
+            page,
+            limit,
+            DramaCategory.All,
+            ct);
+        return new FeedPageResult(result.Items, result.HasMore, CatalogRecommendScope, result.IsLiveGateway);
+    }
+
+    private async Task<CatalogPageResult> GetSortedCatalogPageAsync(
+        string categorySlug,
+        string sort,
+        int page,
+        int limit,
+        DramaCategory category,
+        CancellationToken ct)
+    {
+        var safePage = Math.Max(1, page);
+        var safeLimit = Math.Clamp(limit, 1, 100);
+        var path = $"/api/v1/catalog?category={Uri.EscapeDataString(categorySlug)}&sort={Uri.EscapeDataString(sort)}&page={safePage}&limit={safeLimit}";
+        var data = await SendEnvelopeAsync(
+            HttpMethod.Get,
+            path,
+            MioReelJsonContext.Default.GatewayEnvelopeGatewayCatalogData,
+            content: null,
+            ct);
+
+        var mapped = (data.List ?? [])
+            .Select(item => MapCatalogItem(item, category))
+            .ToList();
+        var hasMore = mapped.Count > 0 && data.PageCount > safePage;
+        IsLastRequestLive = true;
+        return new CatalogPageResult(mapped, hasMore, IsLiveGateway: true);
+    }
+
+    private static DramaCategory CategoryFromSlug(string slug) => slug switch
+    {
+        "real-drama" => DramaCategory.RealDrama,
+        "comic-drama" => DramaCategory.ComicDrama,
+        "ai-drama" => DramaCategory.AiDrama,
+        _ => DramaCategory.All
+    };
+
     private async Task<T> SendEnvelopeAsync<T>(
         HttpMethod method,
         string relativePath,
@@ -344,9 +531,13 @@ public sealed class GatewayDramaCatalogService : IDramaCatalogService
                 {
                     HttpStatusCode.Unauthorized => "视频源鉴权失败（401），请在设置中填写有效的访问令牌",
                     HttpStatusCode.Forbidden => "视频源拒绝访问（403），请检查令牌权限或 IP 白名单",
+                    HttpStatusCode.NotFound => "视频源服务未提供该接口（HTTP 404），请确认网关版本",
                     _ => $"视频源服务返回异常（HTTP {(int)resp.StatusCode}）"
                 };
-                throw new GatewayException(msg, failureKind: ClassifyHttpFailure(resp.StatusCode));
+                throw new GatewayException(
+                    msg,
+                    failureKind: ClassifyHttpFailure(resp.StatusCode),
+                    httpStatus: (int)resp.StatusCode);
             }
 
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
