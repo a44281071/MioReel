@@ -26,6 +26,14 @@
       <Setter Property="BorderBrush" Value="#FB7185" />
       <Setter Property="BorderThickness" Value="3" />
     </Style>
+    <Style Selector="Button.tv-nav">
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="FontSize" Value="16" />
+    </Style>
+    <Style Selector="Button.tv-compact">
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="FontSize" Value="15" />
+    </Style>
     <Style Selector="Button.tv-card">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -36,6 +44,10 @@
       <Setter Property="Background" Value="#1E283A" />
       <Setter Property="BorderBrush" Value="#FB7185" />
       <Setter Property="BorderThickness" Value="3" />
+    </Style>
+    <Style Selector="Button.tv-card-compact">
+      <Setter Property="Width" Value="130" />
+      <Setter Property="Padding" Value="4" />
     </Style>
     <Style Selector="Button.tv-episode">
       <Setter Property="Background" Value="#171D29" />
@@ -69,93 +81,102 @@
 
   <Grid>
     <!-- Browse shell -->
-    <Grid RowDefinitions="86,*" IsVisible="{Binding !Player.IsOpen}">
+    <Grid RowDefinitions="60,*" IsVisible="{Binding !Player.IsOpen}">
       <Border Background="#10141D" BorderBrush="#1E2431" BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="36,0">
-          <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <Border Width="44" Height="44" CornerRadius="12" Background="#FB7185">
-              <TextBlock Text="妙" FontSize="22" FontWeight="Bold" Foreground="#1A0B10"
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="24,0">
+          <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Border Width="36" Height="36" CornerRadius="10" Background="#FB7185">
+              <TextBlock Text="妙" FontSize="18" FontWeight="Bold" Foreground="#1A0B10"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <StackPanel Spacing="0" VerticalAlignment="Center">
-              <TextBlock Text="妙妙短剧" Classes="tv-h1" />
-              <TextBlock Text="Android TV · 遥控器版" Classes="tv-muted" />
+              <TextBlock Text="妙妙短剧" Classes="tv-h1" FontSize="24" />
+              <TextBlock Text="Android TV · 遥控器版" Classes="tv-muted" FontSize="12" />
             </StackPanel>
           </StackPanel>
 
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                       HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Button x:Name="NavExploreButton" Classes="tv" Content="片库"
+            <Button x:Name="NavExploreButton" Classes="tv tv-nav" Content="片库"
                     Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Explore}" />
-            <Button Classes="tv" Content="搜索"
+            <Button Classes="tv tv-nav" Content="搜索"
                     Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Search}" />
-            <Button Classes="tv" Content="历史"
+            <Button Classes="tv tv-nav" Content="历史"
                     Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.History}" />
-            <Button Classes="tv" Content="缓存"
+            <Button Classes="tv tv-nav" Content="缓存"
                     Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Downloads}" />
-            <Button Classes="tv" Content="设置"
+            <Button Classes="tv tv-nav" Content="设置"
                     Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:NavSection.Settings}" />
           </StackPanel>
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Ellipse Width="9" Height="9" Fill="#34D399" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding SourceStatusText}" Classes="tv-muted" MaxWidth="260"
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Ellipse Width="8" Height="8" Fill="#34D399" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding SourceStatusText}" Classes="tv-muted" FontSize="13" MaxWidth="220"
                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           </StackPanel>
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="36,18,36,24">
+      <Grid Grid.Row="1" Margin="24,8,24,10">
         <!-- Explore -->
         <Grid IsVisible="{Binding IsExploreActive}" RowDefinitions="Auto,*">
-          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Classes="tv" Content="全部" Command="{Binding SelectCategoryCommand}"
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Classes="tv tv-compact" Content="全部" Command="{Binding SelectCategoryCommand}"
                       CommandParameter="{x:Static models:DramaCategory.All}" />
-              <Button Classes="tv" Content="真人剧" Command="{Binding SelectCategoryCommand}"
+              <Button Classes="tv tv-compact" Content="真人剧" Command="{Binding SelectCategoryCommand}"
                       CommandParameter="{x:Static models:DramaCategory.RealDrama}" />
-              <Button Classes="tv" Content="漫剧" Command="{Binding SelectCategoryCommand}"
+              <Button Classes="tv tv-compact" Content="漫剧" Command="{Binding SelectCategoryCommand}"
                       CommandParameter="{x:Static models:DramaCategory.ComicDrama}" />
-              <Button Classes="tv" Content="AI 剧" Command="{Binding SelectCategoryCommand}"
+              <Button Classes="tv tv-compact" Content="AI 剧" Command="{Binding SelectCategoryCommand}"
                       CommandParameter="{x:Static models:DramaCategory.AiDrama}" />
             </StackPanel>
             <TextBlock Grid.Column="1" Text="{Binding CatalogCountText}" Classes="tv-muted"
-                       VerticalAlignment="Center" />
-            <Button Grid.Column="2" Classes="tv" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
+                       FontSize="14" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Classes="tv tv-compact" Content="刷新片库" Command="{Binding RefreshCatalogCommand}" />
           </Grid>
 
-          <Grid Grid.Row="1" Margin="0,14,0,0">
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding ExploreRows}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,10">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <StackPanel Orientation="Horizontal" Spacing="14" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                          <Button Classes="tv-card"
-                                  Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
-                                  CommandParameter="{Binding}">
-                            <StackPanel Width="216" Spacing="7">
-                              <controls:DramaCoverControl Width="216" Height="286"
+          <Grid Grid.Row="1" Margin="0,6,0,0">
+            <ItemsControl x:Name="ExploreVirtualizedList"
+                          Classes="virtual-list"
+                          ItemsSource="{Binding ExploreRows}"
+                          IsVisible="{Binding ShowExploreList}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Classes="tv-card tv-card-compact" Margin="0,0,8,8"
+                                Command="{Binding $parent[UserControl].DataContext.OpenDramaCommand}"
+                                CommandParameter="{Binding}">
+                          <StackPanel Width="116" Spacing="4">
+                            <Grid Width="116" Height="155">
+                              <controls:DramaCoverControl Width="116" Height="155"
                                                           Drama="{Binding Drama}"
-                                                          CornerRadius="10" />
-                              <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
-                                         TextTrimming="CharacterEllipsis" MaxLines="1" />
-                              <TextBlock Text="{Binding StatusLabel}" Classes="tv-muted" />
-                            </StackPanel>
-                          </Button>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
+                                                          CornerRadius="8"
+                                                          ShowBadges="False"
+                                                          ShowTextOverlay="False" />
+                              <Border VerticalAlignment="Bottom" Background="#B0000000"
+                                      CornerRadius="0,0,8,8" Padding="4,2">
+                                <TextBlock Text="{Binding StatusLabel}" FontSize="10"
+                                           Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                              </Border>
+                            </Grid>
+                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" MaxLines="1" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
                         IsVisible="{Binding IsLoadingCatalog}">

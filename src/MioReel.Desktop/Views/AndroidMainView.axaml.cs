@@ -2,10 +2,14 @@ using System.ComponentModel;
 using System.Windows.Input;
 using Android.Views;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.Extensions.DependencyInjection;
+using MioReel.Desktop.Services;
 using MioReel.Desktop.ViewModels;
+using ReactiveUI.Primitives;
 
 namespace MioReel.Desktop.Views;
 
@@ -23,6 +27,11 @@ public partial class AndroidMainView : UserControl
     private string? _reportedErrorUrl;
     private bool _endedReported;
     private bool _hostPaused;
+    private readonly CatalogPrefetchGate _explorePrefetchGate = new();
+    private ScrollViewer? _exploreScrollViewer;
+    private bool _isCheckingExplorePrefetch;
+    private bool _isExplorePrefetchQueued;
+    private bool _isCatalogObserved;
 
     // Avalonia's compiled XAML requires an accessible parameterless constructor.
     public AndroidMainView()
@@ -43,6 +52,24 @@ public partial class AndroidMainView : UserControl
         _viewModel.Player.PropertyChanged += OnPlayerPropertyChanged;
         _viewModel.Player.SeekRequested += OnSeekRequested;
 
+        ExploreVirtualizedList.TemplateApplied += (_, _) => AttachExploreScrollViewer();
+        ExploreVirtualizedList.Loaded += (_, _) => AttachExploreScrollViewer();
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key is Key.Down or Key.PageDown or Key.End or Key.Space)
+                RequestExplorePrefetch();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SizeChanged += (_, _) =>
+        {
+            UpdateExploreColumns();
+            QueueExplorePrefetchCheck();
+        };
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty)
+                QueueExplorePrefetchCheck();
+        };
+
         AttachedToVisualTree += (_, _) => OnAttached();
         DetachedFromVisualTree += (_, _) => OnDetached();
     }
@@ -52,6 +79,11 @@ public partial class AndroidMainView : UserControl
     private void OnAttached()
     {
         Current = this;
+        if (!_isCatalogObserved)
+        {
+            _viewModel.PropertyChanged += OnCatalogStateChanged;
+            _isCatalogObserved = true;
+        }
         MainActivity.KeyDispatched += HandleKey;
 
         // A recreated activity may hand us a fresh native player surface.
@@ -68,15 +100,138 @@ public partial class AndroidMainView : UserControl
             else
                 NavExploreButton.Focus();
         });
+        AttachExploreScrollViewer();
+        UpdateExploreColumns();
+        QueueExplorePrefetchCheck();
     }
 
     private void OnDetached()
     {
         _syncTimer.Stop();
+        if (_isCatalogObserved)
+        {
+            _viewModel.PropertyChanged -= OnCatalogStateChanged;
+            _isCatalogObserved = false;
+        }
+        if (_exploreScrollViewer is not null)
+        {
+            _exploreScrollViewer.ScrollChanged -= OnExploreScrollChanged;
+            _exploreScrollViewer = null;
+        }
         MainActivity.KeyDispatched -= HandleKey;
         if (ReferenceEquals(Current, this))
             Current = null;
         MediaPlayer.ReleasePlayer();
+    }
+
+    private void AttachExploreScrollViewer()
+    {
+        var sv = ExploreVirtualizedList.FindDescendantOfType<ScrollViewer>();
+        if (sv is null || ReferenceEquals(_exploreScrollViewer, sv))
+            return;
+
+        if (_exploreScrollViewer is not null)
+            _exploreScrollViewer.ScrollChanged -= OnExploreScrollChanged;
+
+        _exploreScrollViewer = sv;
+        _exploreScrollViewer.ScrollChanged += OnExploreScrollChanged;
+        QueueExplorePrefetchCheck();
+    }
+
+    private void OnExploreScrollChanged(object? sender, ScrollChangedEventArgs e)
+        => RequestExplorePrefetch();
+
+    private void UpdateExploreColumns()
+    {
+        var width = ExploreVirtualizedList.Bounds.Width;
+        if (width <= 0)
+            return;
+        _viewModel.UpdateExploreColumns(width, 130, 8);
+    }
+
+    private void RequestExplorePrefetch()
+    {
+        _explorePrefetchGate.RequestLoad();
+        QueueExplorePrefetchCheck();
+    }
+
+    private void QueueExplorePrefetchCheck()
+    {
+        if (_isExplorePrefetchQueued) return;
+        _isExplorePrefetchQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _isExplorePrefetchQueued = false;
+            _ = CheckExplorePrefetchAsync();
+        }, DispatcherPriority.Background);
+    }
+
+    private async Task CheckExplorePrefetchAsync()
+    {
+        if (_isCheckingExplorePrefetch
+            || !_viewModel.IsExploreActive
+            || !IsEffectivelyVisible
+            || !_viewModel.HasMoreCatalog
+            || _viewModel.IsLoadingCatalog
+            || _viewModel.IsLoadingMoreCatalog)
+            return;
+
+        if (_exploreScrollViewer is not { } sv || sv.Viewport.Height <= 0)
+            return;
+
+        if (!_explorePrefetchGate.TryStart(
+                sv.Extent.Height,
+                sv.Offset.Y,
+                sv.Viewport.Height))
+            return;
+
+        _isCheckingExplorePrefetch = true;
+        try
+        {
+            await _viewModel.LoadMoreCatalogCommand.Execute().ToTask();
+        }
+        finally
+        {
+            _isCheckingExplorePrefetch = false;
+            QueueExplorePrefetchCheck();
+        }
+    }
+
+    private void OnCatalogStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsLoadingCatalog)
+            && _viewModel.IsLoadingCatalog)
+        {
+            _explorePrefetchGate.Reset();
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsLoadingMoreCatalog)
+            && _viewModel is { IsLoadingMoreCatalog: true, IsLoadingCatalog: false })
+        {
+            _explorePrefetchGate.ConsumeRequest();
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedCategory))
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_exploreScrollViewer is not null)
+                    _exploreScrollViewer.Offset = default;
+            });
+        }
+
+        if (e.PropertyName is nameof(MainWindowViewModel.IsLoadingCatalog)
+            or nameof(MainWindowViewModel.IsLoadingMoreCatalog)
+            or nameof(MainWindowViewModel.HasMoreCatalog)
+            or nameof(MainWindowViewModel.SelectedCategory))
+        {
+            if (e.PropertyName is nameof(MainWindowViewModel.IsLoadingCatalog)
+                or nameof(MainWindowViewModel.HasMoreCatalog))
+            {
+                Dispatcher.UIThread.Post(AttachExploreScrollViewer);
+            }
+            QueueExplorePrefetchCheck();
+        }
     }
 
     public bool HandleBack()

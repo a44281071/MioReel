@@ -57,6 +57,7 @@
 
 - **播放器**：AndroidX Media3 `ExoPlayer` + `PlayerView`，由系统 `MediaCodec` 硬解，APK 内**不包含 FFmpeg / FrameFlux**。
 - **界面**：Avalonia 单页 TV 布局，方向键移动焦点，确定键执行，返回键逐级返回/退出播放。
+- **字体/图标**：TV 界面使用 Android 系统字体（`$Default`），避免 Inter 缺少中文字形时显示成横条；播放控制使用矢量 `PathIcon`，不依赖 emoji 字体。
 - **移除的桌面能力**：标题栏、迷你窗/窗口置顶、Win32 窗口切换、系统全局热键。
 - **输出**：仅 `armeabi-v7a`（32 位 ARM）APK，包名 `com.mioreel.tv`，minSdk 24、targetSdk 36，支持 Leanback 启动器与 TV banner。
 

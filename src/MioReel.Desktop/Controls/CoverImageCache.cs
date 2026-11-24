@@ -8,7 +8,15 @@ namespace MioReel.Desktop.Controls;
 /// </summary>
 internal static class CoverImageCache
 {
+#if ANDROID
+    // TV catalog scrolling can walk through hundreds of posters; keep the cache small
+    // because Android TV devices have less headroom than desktops.
+    private const int MaxCacheEntries = 80;
+    private const int DecodeWidth = 300;
+#else
     private const int MaxCacheEntries = 200;
+    private const int DecodeWidth = 360;
+#endif
 
     private static readonly HttpClient Http = new()
     {
@@ -65,7 +73,7 @@ internal static class CoverImageCache
             var bmp = await Task.Run(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                return Bitmap.DecodeToWidth(ms, 360);
+                return Bitmap.DecodeToWidth(ms, DecodeWidth);
             });
 
             if (Cache.Count >= MaxCacheEntries)

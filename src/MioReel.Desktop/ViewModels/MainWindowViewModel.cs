@@ -642,9 +642,9 @@ public sealed class MainWindowViewModel : ReactiveObject
         await SelectCategoryAsync(DramaCategory.All);
     }
 
-    public void UpdateExploreColumns(double availableWidth)
+    public void UpdateExploreColumns(double availableWidth, double cardWidth = 178, double spacing = 14)
     {
-        var cols = Math.Max(1, (int)((availableWidth + 14) / 192));
+        var cols = Math.Max(1, (int)((availableWidth + spacing) / (cardWidth + spacing)));
         if (cols == _exploreColumns && ExploreRows.Count > 0) return;
         _exploreColumns = cols;
         RebuildExploreRows();
