@@ -475,9 +475,9 @@
               <Border Background="#111722" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="12" Padding="20">
                 <StackPanel Spacing="8">
                   <TextBlock Text="遥控器操作" Classes="tv-h2" />
-                  <TextBlock Text="方向键移动焦点 · 确定键播放/暂停或确认选择 · 播放页左右方向键快进快退 · 返回键退出播放"
+                  <TextBlock Text="播放页默认全屏 · 左右键快退/快进 10 秒 · 确定键展开右侧详情与选集 · 详情展开后左右键在面板内移动 · 10 秒无操作自动收起 · 上下键暂不响应"
                              Classes="tv-muted" TextWrapping="Wrap" />
-                  <TextBlock Text="播放页可使用遥控器媒体键：播放/暂停、上一集、下一集。" Classes="tv-muted" />
+                  <TextBlock Text="返回键先收起详情，再退出播放；媒体键支持播放/暂停、上一集、下一集。" Classes="tv-muted" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -486,115 +486,70 @@
       </Grid>
     </Grid>
 
-    <!-- Player page -->
-    <Grid IsVisible="{Binding Player.IsOpen}" Background="#080A0F" RowDefinitions="76,*">
-      <Border Background="#10141D" BorderBrush="#1E2431" BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="28,0" ColumnSpacing="18">
-          <Button x:Name="PlayerBackButton" Classes="tv"
-                  Click="OnClosePlayerClick" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{StaticResource IconBack}" Width="12" Height="12" />
-              <TextBlock Text="返回" VerticalAlignment="Center" />
-            </StackPanel>
-          </Button>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-            <TextBlock Text="{Binding Player.Title}" Classes="tv-h2" />
-            <TextBlock Text="{Binding Player.EpisodeBadgeText}" Classes="tv-muted" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Player.ResolutionLabel}" Classes="tv-muted" VerticalAlignment="Center" />
+    <!-- Player page: full-screen video by default, OK opens details on the right. -->
+    <Grid x:Name="PlayerRoot"
+          IsVisible="{Binding Player.IsOpen}"
+          Background="#000000"
+          ColumnDefinitions="*,Auto"
+          Focusable="True">
+      <Grid x:Name="PlayerVideoStage" Grid.Column="0" ClipToBounds="True">
+        <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}"
+                                    BlurRadius="18" ShowBadges="False" ShowTextOverlay="False"
+                                    IsVisible="{Binding !Player.HasRealMediaUrl}" />
+        <Border Background="#40000000" IsVisible="{Binding !Player.HasRealMediaUrl}" />
+
+        <controls:Media3PlayerView x:Name="MediaPlayer"
+                                   IsVisible="{Binding Player.ShowNativeVideo}" />
+
+        <Border Background="#99000000" IsVisible="{Binding Player.IsResolvingStream}">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+            <ProgressBar Width="240" Height="8" IsIndeterminate="True" Foreground="#FB7185" />
+            <TextBlock Text="正在加载剧集..." FontSize="18" />
           </StackPanel>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <TextBlock Text="{Binding Player.AspectLabel}" Classes="tv-muted" />
-            <TextBlock Text="{Binding Player.QualityLabel}" Classes="tv-muted" />
-          </StackPanel>
-        </Grid>
-      </Border>
-
-      <Grid Grid.Row="1" ColumnDefinitions="*,380" ColumnSpacing="18" Margin="28,18,28,22">
-        <Border Background="#05060A" CornerRadius="12" ClipToBounds="True" BorderBrush="#1F2937" BorderThickness="1">
-          <Grid>
-            <controls:DramaCoverControl Drama="{Binding Player.CurrentDrama}" CornerRadius="12"
-                                        BlurRadius="18" ShowBadges="False" ShowTextOverlay="False"
-                                        IsVisible="{Binding !Player.HasRealMediaUrl}" />
-            <Border Background="#40000000" IsVisible="{Binding !Player.HasRealMediaUrl}" />
-
-            <controls:Media3PlayerView x:Name="MediaPlayer"
-                                       IsVisible="{Binding Player.ShowNativeVideo}" />
-
-            <Border Background="#99000000" IsVisible="{Binding Player.IsResolvingStream}">
-              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                <ProgressBar Width="240" Height="8" IsIndeterminate="True" Foreground="#FB7185" />
-                <TextBlock Text="正在加载剧集..." FontSize="18" />
-              </StackPanel>
-            </Border>
-
-            <Border Background="#CC080A0F" IsVisible="{Binding Player.HasStreamError}">
-              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="560">
-                <TextBlock Text="{Binding Player.StreamErrorMessage}" FontSize="20" TextWrapping="Wrap"
-                           TextAlignment="Center" />
-                <Button Classes="tv" Content="重新加载" HorizontalAlignment="Center"
-                        Command="{Binding Player.RetryResolveCommand}" />
-              </StackPanel>
-            </Border>
-          </Grid>
         </Border>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+        <Border Background="#CC080A0F" IsVisible="{Binding Player.HasStreamError}">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="560">
+            <TextBlock Text="{Binding Player.StreamErrorMessage}" FontSize="20" TextWrapping="Wrap"
+                       TextAlignment="Center" />
+            <Button Classes="tv" Content="重新加载" HorizontalAlignment="Center"
+                    Command="{Binding Player.RetryResolveCommand}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border x:Name="PlayerDetailsPanel"
+              Grid.Column="1"
+              Width="420"
+              IsVisible="{Binding Player.IsDetailsVisible}"
+              Background="#F210141D"
+              BorderBrush="#1F2937"
+              BorderThickness="1,0,0,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,24,18,24">
           <StackPanel Spacing="14">
-            <TextBlock Text="播放控制" Classes="tv-h2" />
-            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
-              <Button Classes="tv" Click="OnSeekBackClick">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                  <PathIcon Data="{StaticResource IconRewind10}" Width="14" Height="14" />
-                  <TextBlock Text="10秒" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Grid.Column="1" x:Name="PlayPauseButton" Classes="tv"
-                      Content="{Binding Player.PlayPauseLabel}"
-                      Command="{Binding Player.TogglePlayPauseCommand}" />
-              <Button Grid.Column="2" Classes="tv" Click="OnSeekForwardClick">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                  <TextBlock Text="10秒" VerticalAlignment="Center" />
-                  <PathIcon Data="{StaticResource IconForward10}" Width="14" Height="14" />
-                </StackPanel>
-              </Button>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Player.Title}" FontSize="24" FontWeight="Bold"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Player.EpisodeBadgeText}" Classes="tv-muted" />
+              </StackPanel>
+              <Button Grid.Column="1" Classes="tv tv-compact" Content="收起"
+                      Click="OnHidePlayerDetailsClick" VerticalAlignment="Top" />
             </Grid>
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-              <Button Classes="tv" Content="上一集" Command="{Binding Player.PreviousEpisodeCommand}" />
-              <Button Grid.Column="1" Classes="tv" Content="下一集" Command="{Binding Player.NextEpisodeCommand}" />
-            </Grid>
+
+            <TextBlock Text="{Binding Player.CategoryTagsText}" Classes="tv-muted" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Player.Synopsis}" Classes="tv-muted"
+                       TextWrapping="Wrap" MaxLines="5" />
+
             <ProgressBar Minimum="0" Maximum="100" Value="{Binding Player.ProgressPercent}"
                          Height="8" Foreground="#FB7185" Background="#1F2937" />
             <TextBlock Text="{Binding Player.PositionText}" Classes="tv-muted" />
 
-            <TextBlock Text="{Binding Player.Synopsis}" Classes="tv-muted" TextWrapping="Wrap" MaxLines="3" />
-
-            <TextBlock Text="清晰度" Classes="tv-h2" />
-            <ItemsControl ItemsSource="{Binding Player.QualityOptions}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <Button Classes="tv" Margin="0,0,8,8" Content="{Binding Label}"
-                          Command="{Binding $parent[UserControl].DataContext.Player.SelectQualityCommand}"
-                          CommandParameter="{Binding}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <TextBlock Text="倍速" Classes="tv-h2" />
-            <ItemsControl ItemsSource="{Binding Player.SpeedOptions}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <Button Classes="tv" Margin="0,0,8,8" Content="{Binding Label}"
-                          Command="{Binding $parent[UserControl].DataContext.Player.SelectSpeedCommand}"
-                          CommandParameter="{Binding}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+              <Button Classes="tv" Content="上一集" Command="{Binding Player.PreviousEpisodeCommand}" />
+              <Button Grid.Column="1" Classes="tv" Content="下一集"
+                      Command="{Binding Player.NextEpisodeCommand}" />
+            </Grid>
 
             <TextBlock Text="{Binding Player.TotalEpisodesText}" Classes="tv-h2" />
             <ItemsControl ItemsSource="{Binding Player.EpisodeRows}">
@@ -617,11 +572,11 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="方向键移动焦点 · 返回键退出播放 · 媒体键切换上下集"
+            <TextBlock Text="确定键播放选中集 · 返回键收起详情 · 10 秒无操作自动收起"
                        Classes="tv-muted" TextWrapping="Wrap" />
           </StackPanel>
         </ScrollViewer>
-      </Grid>
+      </Border>
     </Grid>
   </Grid>
 </UserControl>

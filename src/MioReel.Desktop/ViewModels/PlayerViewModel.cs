@@ -52,6 +52,9 @@ public sealed class PlayerViewModel : ReactiveObject
     private ResolvedStreamInfo? _lastResolvedInfo;
     private bool _suppressSeekEvent;
     private bool _isOpen;
+    private bool _isDetailsVisible;
+    private bool _isAdvancingAfterEnd;
+    private CancellationTokenSource? _autoAdvanceCts;
     private DramaItem? _currentDrama;
     private string _heroTag = string.Empty;
     private int _currentEpisodeNo = 1;
@@ -216,6 +219,25 @@ public sealed class PlayerViewModel : ReactiveObject
             RaiseDanmakuSurfaceProperties();
         }
     }
+
+    /// <summary>
+    /// TV 播放页右侧详情面板是否展开。桌面端沿用常驻面板，不受该状态影响。
+    /// </summary>
+    public bool IsDetailsVisible
+    {
+        get => _isDetailsVisible;
+        private set
+        {
+            if (_isDetailsVisible == value) return;
+            this.RaiseAndSetIfChanged(ref _isDetailsVisible, value);
+        }
+    }
+
+    /// <summary>
+    /// TV 播放页开启后，整部剧播完会继续自动寻找下一部视频，保证播放不中断。
+    /// 桌面端保持原有“自动连播下一集”设置语义。
+    /// </summary>
+    public bool KeepPlayingAcrossVideos { get; set; }
 
     public DramaItem? CurrentDrama
     {
@@ -552,8 +574,13 @@ public sealed class PlayerViewModel : ReactiveObject
     public string CurrentTimeText => TimeSpan.FromSeconds(PositionSeconds).ToString(@"mm\:ss");
     public string DurationText => TimeSpan.FromSeconds(DurationSeconds).ToString(@"mm\:ss");
 
-    public async Task OpenAsync(DramaCardViewModel card)
+    public async Task OpenAsync(
+        DramaCardViewModel card,
+        bool forceFirstEpisode = false,
+        bool fromAutoAdvance = false)
     {
+        if (!fromAutoAdvance)
+            CancelAutoAdvance();
         SavePlaybackProgress();
         CancelPrefetch();
         ResetDanmakuForEpisode(null, 0);
@@ -566,8 +593,12 @@ public sealed class PlayerViewModel : ReactiveObject
 
         HeroTag = card.HeroTag;
         CurrentDrama = card.Drama;
-        var saved = _history.GetHistory().FirstOrDefault(x => x.Drama.SeriesId == card.Drama.SeriesId);
-        CurrentEpisodeNo = Math.Max(1, saved?.LastEpisodeNo ?? card.WatchedEpisode);
+        var saved = forceFirstEpisode
+            ? null
+            : _history.GetHistory().FirstOrDefault(x => x.Drama.SeriesId == card.Drama.SeriesId);
+        CurrentEpisodeNo = forceFirstEpisode
+            ? 1
+            : Math.Max(1, saved?.LastEpisodeNo ?? card.WatchedEpisode);
         _history.RecordWatch(card.Drama, CurrentEpisodeNo, saved?.ProgressPercent ?? 0,
             saved?.PositionSeconds ?? 0, saved?.DurationSeconds ?? 0);
         // Before stream resolves, keep cover aspect (3:4) so Hero lands cleanly without distortion.
@@ -579,6 +610,7 @@ public sealed class PlayerViewModel : ReactiveObject
         ResolvedPlayUrl = null;
         StreamErrorMessage = null;
         AreControlsVisible = true;
+        IsDetailsVisible = false;
         IsPlaying = true;
         IsOpen = true;
         HistoryUpdated?.Invoke();
@@ -632,6 +664,7 @@ public sealed class PlayerViewModel : ReactiveObject
     public void Close()
     {
         SavePlaybackProgress();
+        CancelAutoAdvance();
         CancelPrefetch();
         _resolveCts?.Cancel();
         ResetDanmakuForEpisode(null, 0);
@@ -644,6 +677,7 @@ public sealed class PlayerViewModel : ReactiveObject
         ReleaseActiveProxySession();
         ReleaseRetiredProxySessions();
         AreControlsVisible = true;
+        IsDetailsVisible = false;
         if (wasMini)
         {
             IsMiniMode = false;
@@ -656,6 +690,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private async Task SelectEpisodeAsync(EpisodeOptionViewModel? item)
     {
         if (item is null || CurrentDrama is null) return;
+        HideDetails();
         _resolveCts?.Cancel();
         _resolveCts = new CancellationTokenSource();
         await ResolveAndApplyEpisodeAsync(item.No, _resolveCts.Token);
@@ -664,6 +699,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private async Task NextEpisodeAsync()
     {
         if (CurrentDrama is null || !HasNextEpisode) return;
+        HideDetails();
         _resolveCts?.Cancel();
         _resolveCts = new CancellationTokenSource();
         await ResolveAndApplyEpisodeAsync(CurrentEpisodeNo + 1, _resolveCts.Token);
@@ -672,6 +708,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private async Task PreviousEpisodeAsync()
     {
         if (CurrentDrama is null || !HasPreviousEpisode) return;
+        HideDetails();
         _resolveCts?.Cancel();
         _resolveCts = new CancellationTokenSource();
         await ResolveAndApplyEpisodeAsync(CurrentEpisodeNo - 1, _resolveCts.Token);
@@ -1078,6 +1115,24 @@ public sealed class PlayerViewModel : ReactiveObject
         AreControlsVisible = visible;
     }
 
+    public void ShowDetails()
+    {
+        if (!IsOpen) return;
+        CloseMenu();
+        IsDetailsVisible = true;
+    }
+
+    public void HideDetails()
+    {
+        IsDetailsVisible = false;
+    }
+
+    public void ToggleDetails()
+    {
+        if (IsDetailsVisible) HideDetails();
+        else ShowDetails();
+    }
+
     public void ToggleControlsVisibility() => SetControlsVisible(!AreControlsVisible);
 
     public double? ConsumePendingResumeSeconds()
@@ -1380,11 +1435,164 @@ public sealed class PlayerViewModel : ReactiveObject
 
     public void NotifyPlaybackEnded()
     {
-        if (!IsOpen || !HasRealMediaUrl || IsResolvingStream) return;
-        if (_settings.Current.AutoPlayNextEpisode && CurrentDrama is not null && HasNextEpisode)
-            _ = NextEpisodeAsync();
-        else
-            IsPlaying = false;
+        if (!IsOpen || !HasRealMediaUrl || IsResolvingStream || _isAdvancingAfterEnd) return;
+        if (!KeepPlayingAcrossVideos)
+        {
+            if (_settings.Current.AutoPlayNextEpisode && CurrentDrama is not null && HasNextEpisode)
+                _ = NextEpisodeAsync();
+            else
+                IsPlaying = false;
+            return;
+        }
+
+        SavePlaybackProgress();
+        _ = AdvanceAfterPlaybackEndedAsync();
+    }
+
+    /// <summary>
+    /// 当前视频播放结束后持续续播：优先下一集；整部剧播完则从推荐接口挑选
+    /// 一部未看完的剧集，推荐接口不可用时退回任意目录内容，最后兜底重播当前剧。
+    /// </summary>
+    private async Task AdvanceAfterPlaybackEndedAsync()
+    {
+        if (!IsOpen || _isAdvancingAfterEnd) return;
+        _isAdvancingAfterEnd = true;
+        var cts = new CancellationTokenSource();
+        _autoAdvanceCts?.Cancel();
+        _autoAdvanceCts = cts;
+        try
+        {
+            var current = CurrentDrama;
+            if (current is null) return;
+
+            if (HasNextEpisode)
+            {
+                await NextEpisodeAsync();
+                return;
+            }
+
+            var next = await FindNextDramaAsync(current, cts.Token);
+            if (cts.IsCancellationRequested
+                || !IsOpen
+                || !string.Equals(CurrentDrama?.SeriesId, current.SeriesId, StringComparison.Ordinal))
+                return;
+
+            if (next is not null)
+            {
+                await OpenAsync(
+                    new DramaCardViewModel(next, $"auto-next-{next.SeriesId}", 0),
+                    fromAutoAdvance: true);
+                // 推荐视频解析失败时不要让播放器停在错误页，直接兜底重播当前剧。
+                if (HasStreamError && !cts.IsCancellationRequested)
+                {
+                    await OpenAsync(
+                        new DramaCardViewModel(current, HeroTag, 1),
+                        forceFirstEpisode: true,
+                        fromAutoAdvance: true);
+                }
+                return;
+            }
+
+            // API 无可用结果时也不要让播放器停在黑屏：从头重播当前剧。
+            if (!cts.IsCancellationRequested
+                && IsOpen
+                && string.Equals(CurrentDrama?.SeriesId, current.SeriesId, StringComparison.Ordinal))
+            {
+                await OpenAsync(
+                    new DramaCardViewModel(current, HeroTag, 1),
+                    forceFirstEpisode: true,
+                    fromAutoAdvance: true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户关闭播放器或手动切剧时取消自动续播。
+        }
+        catch (Exception)
+        {
+            if (IsOpen && !cts.IsCancellationRequested)
+                _toast.ShowError("自动续播失败，请返回后重新选择视频");
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoAdvanceCts, cts))
+                _autoAdvanceCts = null;
+            cts.Dispose();
+            _isAdvancingAfterEnd = false;
+        }
+    }
+
+    private async Task<DramaItem?> FindNextDramaAsync(DramaItem current, CancellationToken ct)
+    {
+        var history = _history.GetHistory()
+            .Where(x => x.Drama is not null)
+            .GroupBy(x => x.Drama.SeriesId, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+
+        // 新网关使用 /feed 推荐流；旧网关在服务层自动回退到 catalog?sort=recommend。
+        try
+        {
+            var feed = await _catalog.GetFeedPageAsync(string.Empty, 1, 40, ct);
+            ct.ThrowIfCancellationRequested();
+            var picked = SelectNextDrama(feed.Items, current, history);
+            if (picked is not null) return picked;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // 推荐接口不可用时继续尝试普通目录。
+        }
+
+        try
+        {
+            var catalog = await _catalog.GetCatalogPageAsync(DramaCategory.All, 1, 100, ct);
+            ct.ThrowIfCancellationRequested();
+            return SelectNextDrama(catalog.Items, current, history);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static DramaItem? SelectNextDrama(
+        IReadOnlyList<DramaItem> candidates,
+        DramaItem current,
+        IReadOnlyDictionary<string, HistoryRecord> history)
+    {
+        var pool = candidates
+            .Where(x => !string.IsNullOrWhiteSpace(x.SeriesId))
+            .Where(x => !string.Equals(x.SeriesId, current.SeriesId, StringComparison.Ordinal))
+            .DistinctBy(x => x.SeriesId, StringComparer.Ordinal)
+            .ToList();
+        if (pool.Count == 0) return null;
+
+        var neverWatched = pool.Where(x => !history.ContainsKey(x.SeriesId)).ToList();
+        if (neverWatched.Count > 0) return neverWatched[0];
+
+        var unfinished = pool
+            .Where(x => !IsFullyWatched(x, history[x.SeriesId]))
+            .ToList();
+        return unfinished.Count > 0 ? unfinished[0] : pool[0];
+    }
+
+    private static bool IsFullyWatched(DramaItem drama, HistoryRecord record)
+    {
+        var total = Math.Max(drama.EpisodeCount, record.Drama.EpisodeCount);
+        return total > 0 && record.LastEpisodeNo >= total && record.ProgressPercent >= 95;
+    }
+
+    private void CancelAutoAdvance()
+    {
+        // 任务自身负责释放 CTS；这里只负责打断在途的推荐请求。
+        _autoAdvanceCts?.Cancel();
     }
 
     private void ReleaseActiveProxySession()

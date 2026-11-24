@@ -55,6 +55,29 @@ try
     Check(saved is { LastEpisodeNo: 2, PositionSeconds: 70, ProgressPercent: 58 }, "关闭时保存实际播放进度");
     Check(proxy.Released.Count == proxy.Prepared.Count, "关闭时释放当前集及预加载会话");
 
+    var firstAutoDrama = new DramaItem("auto-1", "自动连播一", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var watchedAutoDrama = new DramaItem("auto-2", "已看完", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var nextAutoDrama = new DramaItem("auto-3", "下一部未看", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var autoHistory = new InMemoryHistoryService();
+    autoHistory.RecordWatch(watchedAutoDrama, 1, 100, 60, 60);
+    var autoCatalog = new AutoNextCatalog([watchedAutoDrama, nextAutoDrama]);
+    var autoProxy = new FakeProxy();
+    player = new PlayerViewModel(autoCatalog, autoProxy, autoHistory, new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>())
+    {
+        KeepPlayingAcrossVideos = true
+    };
+    await player.OpenAsync(new DramaCardViewModel(firstAutoDrama, "auto"));
+    Check(player.HasRealMediaUrl && !player.IsDetailsVisible, "播放页默认全屏且不展开详情面板");
+    player.ShowDetails();
+    Check(player.IsDetailsVisible, "确定键可展开右侧详情与选集");
+    player.HideDetails();
+    Check(!player.IsDetailsVisible, "详情面板可收起");
+    player.NotifyPlaybackEnded();
+    await WaitUntilAsync(() => player.CurrentDrama?.SeriesId == nextAutoDrama.SeriesId, "整部剧播完后自动续播下一部");
+    Check(autoCatalog.FeedRequests > 0 && player.CurrentDrama?.SeriesId == nextAutoDrama.SeriesId,
+        "自动续播优先使用推荐接口并跳过已看完的视频");
+    player.Close();
+
     var qualitySettings = new InMemorySettingsService();
     qualitySettings.Update(qualitySettings.Current with { DefaultQuality = 720 });
     catalog = new FakeCatalog
@@ -253,6 +276,17 @@ static void Check(bool condition, string description)
     Console.WriteLine("PASS: " + description);
 }
 
+static async Task WaitUntilAsync(Func<bool> condition, string description)
+{
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+    while (!condition())
+    {
+        if (timeout.IsCancellationRequested)
+            throw new Exception("FAIL: " + description);
+        await Task.Delay(10);
+    }
+}
+
 static async Task<byte[]> ReadRange(HttpClient http, Uri uri, long start, long end)
 {
     using var request = new HttpRequestMessage(HttpMethod.Get, uri);
@@ -266,6 +300,33 @@ public class NoopProxy : DispatchProxy
 {
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
         targetMethod?.ReturnType == typeof(void) ? null : targetMethod?.ReturnType.IsValueType == true ? Activator.CreateInstance(targetMethod.ReturnType) : null;
+}
+
+sealed class AutoNextCatalog(IReadOnlyList<DramaItem> recommendations) : IDramaCatalogService
+{
+    public int FeedRequests { get; private set; }
+    public bool IsLastRequestLive => true;
+
+    public Task<FeedPageResult> GetFeedPageAsync(string scope, int page = 1, int limit = 40, CancellationToken ct = default)
+    {
+        FeedRequests++;
+        return Task.FromResult(new FeedPageResult(recommendations, false, "auto-scope", true));
+    }
+
+    public Task<IReadOnlyList<EpisodeItem>> GetEpisodesAsync(string seriesId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EpisodeItem>>([new(1, "1", "1", true)]);
+
+    public Task<ResolvedStreamInfo> ResolveEpisodeAsync(string seriesId, int episodeNo, int quality = 1080, CancellationToken ct = default) =>
+        Task.FromResult(new ResolvedStreamInfo(
+            seriesId, episodeNo, "https://example.invalid/auto.mp4", new Dictionary<string, string>(),
+            "", "none", quality, 720, 1280, "h264", DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds()));
+
+    public Task<CatalogPageResult> GetCatalogPageAsync(DramaCategory category, int page = 1, int limit = 40, CancellationToken ct = default) =>
+        Task.FromResult(new CatalogPageResult([], false, true));
+
+    public Task<IReadOnlyList<DramaItem>> GetCatalogAsync(DramaCategory category, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<DramaItem>> SearchAsync(string query, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<GatewayHealthResult> TestConnectionAsync(string gatewayBaseUrl, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 sealed class FakeCatalog : IDramaCatalogService

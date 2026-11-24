@@ -23,6 +23,7 @@ public partial class AndroidMainView : UserControl
 
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _syncTimer;
+    private readonly DispatcherTimer _playerDetailsHideTimer;
     private string? _loadedUrl;
     private string? _reportedErrorUrl;
     private bool _endedReported;
@@ -45,9 +46,13 @@ public partial class AndroidMainView : UserControl
         _viewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
+        _viewModel.Player.KeepPlayingAcrossVideos = true;
 
         _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _syncTimer.Tick += (_, _) => SyncPlayback();
+
+        _playerDetailsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _playerDetailsHideTimer.Tick += (_, _) => HidePlayerDetails();
 
         _viewModel.Player.PropertyChanged += OnPlayerPropertyChanged;
         _viewModel.Player.SeekRequested += OnSeekRequested;
@@ -97,9 +102,15 @@ public partial class AndroidMainView : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             if (_viewModel.Player.IsOpen)
-                PlayPauseButton.Focus();
+            {
+                PlayerRoot.Focus();
+                if (_viewModel.Player.IsDetailsVisible)
+                    FocusCurrentPlayerEpisode();
+            }
             else
+            {
                 NavExploreButton.Focus();
+            }
         });
         AttachExploreScrollViewer();
         UpdateExploreColumns();
@@ -109,6 +120,7 @@ public partial class AndroidMainView : UserControl
     private void OnDetached()
     {
         _syncTimer.Stop();
+        _playerDetailsHideTimer.Stop();
         if (_isCatalogObserved)
         {
             _viewModel.PropertyChanged -= OnCatalogStateChanged;
@@ -243,7 +255,10 @@ public partial class AndroidMainView : UserControl
     {
         if (_viewModel.Player.IsOpen)
         {
-            ClosePlayer();
+            if (_viewModel.Player.IsDetailsVisible)
+                HidePlayerDetails();
+            else
+                ClosePlayer();
             return true;
         }
 
@@ -284,27 +299,52 @@ public partial class AndroidMainView : UserControl
             case Keycode.MediaPlay:
             case Keycode.MediaPause:
             case Keycode.Headsethook:
+                ResetPlayerDetailsIdleTimer();
                 _viewModel.Player.IsPlaying = !_viewModel.Player.IsPlaying;
                 return true;
 
             case Keycode.MediaNext:
             case Keycode.ChannelUp:
+                ResetPlayerDetailsIdleTimer();
                 ((ICommand)_viewModel.Player.NextEpisodeCommand).Execute(null);
                 return true;
 
             case Keycode.MediaPrevious:
             case Keycode.ChannelDown:
+                ResetPlayerDetailsIdleTimer();
                 ((ICommand)_viewModel.Player.PreviousEpisodeCommand).Execute(null);
                 return true;
 
             case Keycode.MediaFastForward:
+                ResetPlayerDetailsIdleTimer();
                 MediaPlayer.SeekBy(10_000);
                 return true;
 
             case Keycode.MediaRewind:
+                ResetPlayerDetailsIdleTimer();
                 MediaPlayer.SeekBy(-10_000);
                 return true;
 
+            case Keycode.MediaStop:
+                ClosePlayer();
+                return true;
+        }
+
+        if (_viewModel.Player.IsDetailsVisible)
+        {
+            // 详情面板打开时，左右键交给 Avalonia 在面板内移动焦点，
+            // 不再触发快退/快进；上下键也用于面板内导航。
+            if (e.KeyCode is Keycode.DpadUp or Keycode.DpadDown
+                or Keycode.DpadLeft or Keycode.DpadRight
+                or Keycode.DpadCenter or Keycode.Enter)
+            {
+                ResetPlayerDetailsIdleTimer();
+            }
+            return false;
+        }
+
+        switch (e.KeyCode)
+        {
             case Keycode.DpadRight:
                 MediaPlayer.SeekBy(10_000);
                 return true;
@@ -313,8 +353,14 @@ public partial class AndroidMainView : UserControl
                 MediaPlayer.SeekBy(-10_000);
                 return true;
 
-            case Keycode.MediaStop:
-                ClosePlayer();
+            case Keycode.DpadUp:
+            case Keycode.DpadDown:
+                // 上下按键暂时留空，避免误触。
+                return true;
+
+            case Keycode.DpadCenter:
+            case Keycode.Enter:
+                ShowPlayerDetails();
                 return true;
 
             default:
@@ -329,14 +375,33 @@ public partial class AndroidMainView : UserControl
             case nameof(PlayerViewModel.IsOpen):
                 if (_viewModel.Player.IsOpen)
                 {
-                    Dispatcher.UIThread.Post(() => PlayPauseButton.Focus());
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        PlayerRoot.Focus();
+                        if (_viewModel.Player.IsDetailsVisible)
+                            FocusCurrentPlayerEpisode();
+                    });
                 }
                 else
                 {
+                    _playerDetailsHideTimer.Stop();
                     MediaPlayer.Stop();
                     _loadedUrl = null;
                     _endedReported = false;
                     Dispatcher.UIThread.Post(() => NavExploreButton.Focus());
+                }
+                break;
+
+            case nameof(PlayerViewModel.IsDetailsVisible):
+                if (_viewModel.Player.IsDetailsVisible)
+                {
+                    ResetPlayerDetailsIdleTimer();
+                    Dispatcher.UIThread.Post(FocusCurrentPlayerEpisode);
+                }
+                else
+                {
+                    _playerDetailsHideTimer.Stop();
+                    Dispatcher.UIThread.Post(() => PlayerRoot.Focus());
                 }
                 break;
 
@@ -453,7 +518,40 @@ public partial class AndroidMainView : UserControl
     private void OnSeekRequested(TimeSpan position)
         => MediaPlayer.SeekTo((long)(position.TotalSeconds * 1000));
 
-    private void OnClosePlayerClick(object? sender, RoutedEventArgs e) => ClosePlayer();
+    private void ShowPlayerDetails()
+    {
+        if (!_viewModel.Player.IsOpen) return;
+        _viewModel.Player.ShowDetails();
+        ResetPlayerDetailsIdleTimer();
+        Dispatcher.UIThread.Post(FocusCurrentPlayerEpisode, DispatcherPriority.Background);
+    }
+
+    private void HidePlayerDetails()
+    {
+        _playerDetailsHideTimer.Stop();
+        _viewModel.Player.HideDetails();
+        PlayerRoot.Focus();
+    }
+
+    private void ResetPlayerDetailsIdleTimer()
+    {
+        _playerDetailsHideTimer.Stop();
+        if (_viewModel.Player.IsOpen && _viewModel.Player.IsDetailsVisible)
+            _playerDetailsHideTimer.Start();
+    }
+
+    private void FocusCurrentPlayerEpisode()
+    {
+        if (!_viewModel.Player.IsOpen || !_viewModel.Player.IsDetailsVisible)
+            return;
+
+        var buttons = PlayerDetailsPanel.GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
+        var target = buttons.FirstOrDefault(x => x.DataContext is EpisodeOptionViewModel { IsCurrent: true })
+            ?? buttons.FirstOrDefault();
+        target?.Focus();
+    }
+
+    private void OnHidePlayerDetailsClick(object? sender, RoutedEventArgs e) => HidePlayerDetails();
 
     private void ClosePlayer()
     {
@@ -463,7 +561,4 @@ public partial class AndroidMainView : UserControl
         _viewModel.Player.ReleaseRetiredProxySessions();
     }
 
-    private void OnSeekBackClick(object? sender, RoutedEventArgs e) => MediaPlayer.SeekBy(-10_000);
-
-    private void OnSeekForwardClick(object? sender, RoutedEventArgs e) => MediaPlayer.SeekBy(10_000);
-}
+    }
