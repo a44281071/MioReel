@@ -477,7 +477,7 @@
                   <TextBlock Text="遥控器操作" Classes="tv-h2" />
                   <TextBlock Text="播放页默认全屏 · 左右键快退/快进 10 秒 · 确定键展开右侧详情与选集 · 详情展开后左右键在面板内移动 · 10 秒无操作自动收起 · 上下键暂不响应"
                              Classes="tv-muted" TextWrapping="Wrap" />
-                  <TextBlock Text="返回键先收起详情，再退出播放；媒体键支持播放/暂停、上一集、下一集。" Classes="tv-muted" />
+                  <TextBlock Text="返回键先收起详情，再退出播放；媒体键支持播放/暂停、上一集、下一集；详情中可直接跳到下一个推荐视频。" Classes="tv-muted" TextWrapping="Wrap" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -550,6 +550,8 @@
               <Button Grid.Column="1" Classes="tv" Content="下一集"
                       Command="{Binding Player.NextEpisodeCommand}" />
             </Grid>
+            <Button Classes="tv" Content="跳到下一个推荐视频" HorizontalAlignment="Stretch"
+                    Command="{Binding Player.SkipToNextRecommendationCommand}" />
 
             <TextBlock Text="{Binding Player.TotalEpisodesText}" Classes="tv-h2" />
             <ItemsControl ItemsSource="{Binding Player.EpisodeRows}">
@@ -573,6 +575,8 @@
             </ItemsControl>
 
             <TextBlock Text="确定键播放选中集 · 返回键收起详情 · 10 秒无操作自动收起"
+                       Classes="tv-muted" TextWrapping="Wrap" />
+            <TextBlock Text="「跳到下一个推荐视频」会立即离开当前剧，播放推荐流中的下一部。"
                        Classes="tv-muted" TextWrapping="Wrap" />
           </StackPanel>
         </ScrollViewer>

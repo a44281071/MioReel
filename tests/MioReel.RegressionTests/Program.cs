@@ -60,7 +60,7 @@ try
     var nextAutoDrama = new DramaItem("auto-3", "下一部未看", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
     var autoHistory = new InMemoryHistoryService();
     autoHistory.RecordWatch(watchedAutoDrama, 1, 100, 60, 60);
-    var autoCatalog = new AutoNextCatalog([watchedAutoDrama, nextAutoDrama]);
+    var autoCatalog = new AutoNextCatalog([[watchedAutoDrama, nextAutoDrama]]);
     var autoProxy = new FakeProxy();
     player = new PlayerViewModel(autoCatalog, autoProxy, autoHistory, new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>())
     {
@@ -76,6 +76,38 @@ try
     await WaitUntilAsync(() => player.CurrentDrama?.SeriesId == nextAutoDrama.SeriesId, "整部剧播完后自动续播下一部");
     Check(autoCatalog.FeedRequests > 0 && player.CurrentDrama?.SeriesId == nextAutoDrama.SeriesId,
         "自动续播优先使用推荐接口并跳过已看完的视频");
+    player.Close();
+
+    var pagedCurrent = new DramaItem("auto-page-1", "自动续播翻页当前剧", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var pagedWatched = new DramaItem("auto-page-2", "推荐页已看完", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var pagedNext = new DramaItem("auto-page-3", "推荐页下一部未看", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var pagedHistory = new InMemoryHistoryService();
+    pagedHistory.RecordWatch(pagedWatched, 1, 100, 60, 60);
+    var pagedCatalog = new AutoNextCatalog([[pagedWatched], [pagedNext]]);
+    player = new PlayerViewModel(pagedCatalog, new FakeProxy(), pagedHistory, new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>())
+    {
+        KeepPlayingAcrossVideos = true
+    };
+    await player.OpenAsync(new DramaCardViewModel(pagedCurrent, "auto-page"));
+    player.NotifyPlaybackEnded();
+    await WaitUntilAsync(() => player.CurrentDrama?.SeriesId == pagedNext.SeriesId, "自动续播翻页寻找未看推荐");
+    Check(pagedCatalog.FeedPages.SequenceEqual([1, 2]), "推荐第一页全是已看完内容时自动续播继续翻页");
+    Check(player.CurrentEpisodeNo == 1, "自动续播的下一部剧从第一集开始");
+    player.Close();
+
+    var skipCurrent = new DramaItem("skip-1", "待跳过当前剧", "", 3, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var skipNext = new DramaItem("skip-2", "下一个推荐视频", "", 1, "", "", [], "2026", DramaCategory.All, "#000000", "#FFFFFF");
+    var skipCatalog = new AutoNextCatalog([[skipCurrent, skipNext]]);
+    player = new PlayerViewModel(skipCatalog, new FakeProxy(), new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>())
+    {
+        KeepPlayingAcrossVideos = true
+    };
+    await player.OpenAsync(new DramaCardViewModel(skipCurrent, "skip"));
+    player.ShowDetails();
+    await player.SkipToNextRecommendationCommand.Execute().ToTask();
+    await WaitUntilAsync(() => player.CurrentDrama?.SeriesId == skipNext.SeriesId, "详情按钮跳到下一个推荐视频");
+    Check(!player.IsDetailsVisible && player.CurrentEpisodeNo == 1,
+        "跳到下一个推荐视频后收起详情并从第一集播放");
     player.Close();
 
     var qualitySettings = new InMemorySettingsService();
@@ -302,15 +334,20 @@ public class NoopProxy : DispatchProxy
         targetMethod?.ReturnType == typeof(void) ? null : targetMethod?.ReturnType.IsValueType == true ? Activator.CreateInstance(targetMethod.ReturnType) : null;
 }
 
-sealed class AutoNextCatalog(IReadOnlyList<DramaItem> recommendations) : IDramaCatalogService
+sealed class AutoNextCatalog(IReadOnlyList<IReadOnlyList<DramaItem>> pages) : IDramaCatalogService
 {
-    public int FeedRequests { get; private set; }
+    public List<int> FeedPages { get; } = [];
+    public List<string> FeedScopes { get; } = [];
+    public int FeedRequests => FeedPages.Count;
     public bool IsLastRequestLive => true;
 
     public Task<FeedPageResult> GetFeedPageAsync(string scope, int page = 1, int limit = 40, CancellationToken ct = default)
     {
-        FeedRequests++;
-        return Task.FromResult(new FeedPageResult(recommendations, false, "auto-scope", true));
+        FeedPages.Add(page);
+        FeedScopes.Add(scope);
+        var items = page >= 1 && page <= pages.Count ? pages[page - 1] : [];
+        var hasMore = page < pages.Count;
+        return Task.FromResult(new FeedPageResult(items, hasMore, "auto-scope", true));
     }
 
     public Task<IReadOnlyList<EpisodeItem>> GetEpisodesAsync(string seriesId, CancellationToken ct = default) =>
