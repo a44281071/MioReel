@@ -405,6 +405,18 @@ public partial class AndroidMainView : UserControl
                 }
                 break;
 
+            case nameof(PlayerViewModel.CurrentDrama):
+                // “跳到下一个推荐视频”只替换详情内容，不关闭面板：
+                // 把焦点留在同一个按钮上，方便连续切换多部推荐剧。
+                if (_viewModel.Player.IsOpen && _viewModel.Player.IsDetailsVisible)
+                {
+                    ResetPlayerDetailsIdleTimer();
+                    Dispatcher.UIThread.Post(
+                        () => SkipToNextRecommendationButton.Focus(),
+                        DispatcherPriority.Background);
+                }
+                break;
+
             case nameof(PlayerViewModel.ResolvedPlayUrl):
                 _loadedUrl = null;
                 _reportedErrorUrl = null;

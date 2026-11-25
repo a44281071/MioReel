@@ -550,7 +550,8 @@
               <Button Grid.Column="1" Classes="tv" Content="下一集"
                       Command="{Binding Player.NextEpisodeCommand}" />
             </Grid>
-            <Button Classes="tv" Content="跳到下一个推荐视频" HorizontalAlignment="Stretch"
+            <Button x:Name="SkipToNextRecommendationButton" Classes="tv"
+                    Content="跳到下一个推荐视频" HorizontalAlignment="Stretch"
                     Command="{Binding Player.SkipToNextRecommendationCommand}" />
 
             <TextBlock Text="{Binding Player.TotalEpisodesText}" Classes="tv-h2" />

@@ -106,8 +106,8 @@ try
     player.ShowDetails();
     await player.SkipToNextRecommendationCommand.Execute().ToTask();
     await WaitUntilAsync(() => player.CurrentDrama?.SeriesId == skipNext.SeriesId, "详情按钮跳到下一个推荐视频");
-    Check(!player.IsDetailsVisible && player.CurrentEpisodeNo == 1,
-        "跳到下一个推荐视频后收起详情并从第一集播放");
+    Check(player.IsDetailsVisible && player.CurrentEpisodeNo == 1,
+        "跳到下一个推荐视频后保持详情面板并从第一集播放");
     player.Close();
 
     var qualitySettings = new InMemorySettingsService();

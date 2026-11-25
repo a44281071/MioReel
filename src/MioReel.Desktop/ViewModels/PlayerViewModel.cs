@@ -584,7 +584,8 @@ public sealed class PlayerViewModel : ReactiveObject
     public async Task OpenAsync(
         DramaCardViewModel card,
         bool forceFirstEpisode = false,
-        bool fromAutoAdvance = false)
+        bool fromAutoAdvance = false,
+        bool preserveDetails = false)
     {
         if (!fromAutoAdvance)
         {
@@ -620,7 +621,10 @@ public sealed class PlayerViewModel : ReactiveObject
         ResolvedPlayUrl = null;
         StreamErrorMessage = null;
         AreControlsVisible = true;
-        IsDetailsVisible = false;
+        // 从播放详情里“跳到下一个推荐视频”时保持面板和按钮焦点，
+        // 只替换面板内容，避免关闭/重开面板导致焦点丢失和资源释放问题。
+        if (!preserveDetails)
+            IsDetailsVisible = false;
         IsPlaying = true;
         IsOpen = true;
         HistoryUpdated?.Invoke();
@@ -739,7 +743,6 @@ public sealed class PlayerViewModel : ReactiveObject
         try
         {
             SavePlaybackProgress();
-            HideDetails();
             var current = CurrentDrama;
             var candidates = await FindNextDramaCandidatesAsync(current, cts.Token);
             if (cts.IsCancellationRequested || !IsOpen) return;
@@ -750,15 +753,16 @@ public sealed class PlayerViewModel : ReactiveObject
                 return;
             }
 
-            if (await TryOpenNextDramaAsync(candidates, cts.Token))
+            if (await TryOpenNextDramaAsync(candidates, cts.Token, preserveDetails: true))
                 return;
 
             if (IsOpen && !cts.IsCancellationRequested)
             {
-                // 全部候选加载失败时回到当前剧，避免停在错误页。
+                // 全部候选加载失败时回到当前剧，避免停在错误页；详情面板保持打开。
                 await OpenAsync(
                     new DramaCardViewModel(current, HeroTag, 0),
-                    fromAutoAdvance: true);
+                    fromAutoAdvance: true,
+                    preserveDetails: true);
                 _toast.ShowError("推荐视频加载失败，请稍后重试");
             }
         }
@@ -1574,7 +1578,8 @@ public sealed class PlayerViewModel : ReactiveObject
 
     private async Task<bool> TryOpenNextDramaAsync(
         IReadOnlyList<DramaItem> candidates,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool preserveDetails = false)
     {
         foreach (var candidate in candidates)
         {
@@ -1585,7 +1590,8 @@ public sealed class PlayerViewModel : ReactiveObject
             await OpenAsync(
                 new DramaCardViewModel(candidate, $"auto-next-{candidate.SeriesId}", 0),
                 forceFirstEpisode: true,
-                fromAutoAdvance: true);
+                fromAutoAdvance: true,
+                preserveDetails: preserveDetails);
 
             if (!HasStreamError && !string.IsNullOrWhiteSpace(ResolvedPlayUrl))
             {
