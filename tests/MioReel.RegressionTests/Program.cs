@@ -37,14 +37,19 @@ try
     var player = new PlayerViewModel(catalog, proxy, history, new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
     await player.OpenAsync(new DramaCardViewModel(drama, "test"));
     Check(player.ConsumePendingResumeSeconds() == 30, "从真实历史位置断点续播");
-    Check(catalog.Resolved.SequenceEqual([1, 2]) && proxy.Prepared.Count == 2, "当前集加载后提前解析并准备下一集媒体");
+    Check(catalog.Resolved.SequenceEqual([1]) && proxy.Prepared.Count == 1, "开播时不与当前播放抢带宽预取下一集");
     player.SyncFromPlayer(TimeSpan.FromSeconds(55), TimeSpan.FromSeconds(120));
+    Check(proxy.Prepared.Count == 1, "未接近片尾时保持不预取");
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => proxy.Prepared.Count == 2, "接近片尾时预取下一集");
+    Check(catalog.Resolved.SequenceEqual([1, 2]), "片尾预取解析并准备下一集媒体");
     var nextUri = proxy.Prepared[1];
     var sourceChanges = new List<string?>();
     player.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PlayerViewModel.ResolvedPlayUrl)) sourceChanges.Add(player.ResolvedPlayUrl); };
     await player.NextEpisodeCommand.Execute().ToTask();
     Check(player.ResolvedPlayUrl == nextUri.ToString() && catalog.Resolved.Count(x => x == 2) == 1, "切集复用预加载会话且不重复解析");
-    Check(catalog.Resolved.SequenceEqual([1, 2, 3]), "切集后继续预加载下一集");
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => catalog.Resolved.SequenceEqual([1, 2, 3]), "切集后继续预加载下一集");
     Check(sourceChanges.SequenceEqual([nextUri.ToString()]), "切集直接替换播放源，中途不清空播放器");
     Check(!proxy.Released.Contains(proxy.Prepared[0]), "下一集开始播放前保留旧代理会话");
     player.ReleaseRetiredProxySessions();
@@ -126,6 +131,8 @@ try
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), qualitySettings, DispatchProxy.Create<IToastService, NoopProxy>());
     qualitySettings.Update(qualitySettings.Current with { DefaultQuality = 1080 });
     await player.OpenAsync(new DramaCardViewModel(drama, "preferred"));
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => proxy.Prepared.Count == 2, "片尾预取下一集");
     Check(catalog.RequestedQualities.SequenceEqual([1080, 1080]), "播放读取最新默认画质，单集降级不会覆盖后续1080P偏好");
     Check(player.QualityLabel == "720P" && player.QualityPreferenceText.Contains("1080P"), "缺少1080P时显示真实画质并保留优先级说明");
     Check(proxy.Streams[1].Quality == 1080 && proxy.Streams[1].PlayUrl.EndsWith("1080.mp4"), "预加载使用可用的1080P变体");
@@ -142,6 +149,8 @@ try
     proxy = new FakeProxy();
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
     await player.OpenAsync(new DramaCardViewModel(drama, "failure"));
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => catalog.Resolved.SequenceEqual([1, 2]), "片尾预取下一集");
     Check(player.HasRealMediaUrl && !player.HasStreamError, "预加载失败不影响当前播放");
     catalog.FailEpisode = 0;
     await player.NextEpisodeCommand.Execute().ToTask();
@@ -154,8 +163,12 @@ try
     proxy = new FakeProxy();
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
     await player.OpenAsync(new DramaCardViewModel(drama, "quality"));
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => proxy.Prepared.Count == 2, "片尾预取下一集");
     var oldPrefetch = proxy.Prepared[1];
     await player.SelectQualityCommand.Execute(new PlayerMenuOptionViewModel("720P", "", intValue: 720)).ToTask();
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => proxy.Prepared.Count == 4, "切换清晰度后重新预取下一集");
     Check(proxy.Released.Contains(oldPrefetch) && catalog.RequestedQualities.TakeLast(2).All(x => x == 720), "切换清晰度释放旧预加载并按新画质重新缓存");
     var qualityPrefetch = proxy.Prepared[^1];
     await player.NextEpisodeCommand.Execute().ToTask();
@@ -166,6 +179,8 @@ try
     proxy = new FakeProxy();
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
     await player.OpenAsync(new DramaCardViewModel(drama, "skip"));
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await WaitUntilAsync(() => proxy.Prepared.Count == 2, "片尾预取下一集");
     var skipped = proxy.Prepared[1];
     await player.SelectEpisodeCommand.Execute(player.Episodes.Single(x => x.No == 3)).ToTask();
     Check(proxy.Released.Contains(skipped) && player.CurrentEpisodeNo == 3, "跳集时丢弃不匹配的下一集缓存");
@@ -245,6 +260,8 @@ try
     proxy = new FakeProxy();
     player = new PlayerViewModel(catalog, proxy, new InMemoryHistoryService(), new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
     await player.OpenAsync(new DramaCardViewModel(drama, "cancel"));
+    player.SyncFromPlayer(TimeSpan.FromSeconds(80), TimeSpan.FromSeconds(120));
+    await Task.Delay(50);
     player.Close();
     catalog.Delayed.TrySetResult();
     await Task.Delay(50);
@@ -294,6 +311,22 @@ try
     mediaProxy.ReleaseSession(playable);
     using var released = await http.GetAsync(playable);
     Check(released.StatusCode == HttpStatusCode.NotFound, "释放后的媒体会话不可继续访问");
+
+    await using (var noRange = new NoRangeServer())
+    {
+        using var noRangeProxy = new LocalMediaProxyService();
+        var noRangeInfo = new ResolvedStreamInfo("norange", 1, noRange.Url, new Dictionary<string, string>(), "", "none", 1080, 720, 1280, "h264", 0);
+        var noRangeUri = await noRangeProxy.PreparePlayableUriAsync(noRangeInfo);
+        Check(noRange.RequestCount == 1, "上游忽略 Range 时只做一次轻量探测，不再追读尾部");
+        var noRangeOpening = await ReadRange(http, noRangeUri, 0, 65535);
+        Check(noRangeOpening.SequenceEqual(noRange.Bytes.Take(65536)), "上游忽略 Range 时开头数据仍正确");
+        var noRangeFailed = false;
+        try { _ = await ReadRange(http, noRangeUri, 128 * 1024, 160 * 1024 - 1); }
+        catch { noRangeFailed = true; }
+        Check(noRangeFailed, "上游忽略 Range 时中段读取快速失败而不是整集缓冲");
+        noRangeProxy.ReleaseSession(noRangeUri);
+    }
+
     Console.WriteLine("所有回归检查通过");
 }
 finally
@@ -537,6 +570,56 @@ sealed class RangeServer : IAsyncDisposable
         _stop.Cancel();
         _listener.Stop();
         await _loop;
+        _stop.Dispose();
+    }
+}
+
+sealed class NoRangeServer : IAsyncDisposable
+{
+    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Task _loop;
+    private int _requests;
+    public byte[] Bytes { get; } = Enumerable.Range(0, 4 * 1024 * 1024).Select(x => (byte)(x % 251)).ToArray();
+    public int RequestCount => Volatile.Read(ref _requests);
+    public string Url { get; }
+    public NoRangeServer()
+    {
+        _listener.Start();
+        Url = $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/video.mp4";
+        _loop = RunAsync();
+    }
+    private async Task RunAsync()
+    {
+        while (!_stop.IsCancellationRequested)
+        {
+            try
+            {
+                using var client = await _listener.AcceptTcpClientAsync(_stop.Token);
+                await ServeAsync(client);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (SocketException) when (_stop.IsCancellationRequested) { break; }
+            catch
+            {
+                // Clients may hang up mid-body after a request is rejected; keep serving.
+            }
+        }
+    }
+    private async Task ServeAsync(TcpClient client)
+    {
+        await using var stream = client.GetStream();
+        using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+        while (await reader.ReadLineAsync(_stop.Token) is { Length: > 0 }) { }
+        Interlocked.Increment(ref _requests);
+        await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {Bytes.Length}\r\nConnection: close\r\n\r\n"), _stop.Token);
+        await stream.WriteAsync(Bytes, _stop.Token);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        _stop.Cancel();
+        _listener.Stop();
+        try { await _loop; } catch { }
         _stop.Dispose();
     }
 }

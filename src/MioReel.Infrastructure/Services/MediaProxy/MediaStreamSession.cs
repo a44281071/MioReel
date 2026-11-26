@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net;
 using System.Net.Http.Headers;
 
@@ -5,9 +6,15 @@ namespace MioReel.Infrastructure.Services.MediaProxy;
 
 internal sealed class HttpMediaStreamSession : IDisposable
 {
-    // Keep the opening media data ready for immediate playback, including speculative next episodes.
-    private const int InitialProbeBytes = 2 * 1024 * 1024;
+    // Only a small opening window is fetched before handing out the proxy URL: enough to learn
+    // the total length and to locate a front-loaded moov for CENC streams. Everything else is
+    // pulled on demand by the player's range reads, so first frame is not gated on 2MB.
+    private const int InitialProbeBytes = 64 * 1024;
     private const int ReadAheadWindowBytes = 1024 * 1024;
+    // Hard caps so a malformed box or a range-ignoring upstream can never buffer a whole episode.
+    private const long MaxMoovBoxBytes = 8 * 1024 * 1024;
+    private const long MaxUpstreamFetchBytes = 16 * 1024 * 1024;
+    private static readonly TimeSpan UpstreamReadTimeout = TimeSpan.FromSeconds(60);
 
     private readonly HttpClient _http;
     private readonly string _playUrl;
@@ -25,6 +32,7 @@ internal sealed class HttpMediaStreamSession : IDisposable
     private long _tailStart;
     private byte[] _tailData = [];
     private int _tailValidLength;
+    private bool _upstreamAcceptsRanges = true;
     private bool _disposed;
 
     public HttpMediaStreamSession(
@@ -57,7 +65,7 @@ internal sealed class HttpMediaStreamSession : IDisposable
 
         if (_decryptionKey is not { Length: 16 })
         {
-            await PrepareTailAsync(linked.Token);
+            await PrepareTailIfNeededAsync(linked.Token);
             return;
         }
 
@@ -74,8 +82,17 @@ internal sealed class HttpMediaStreamSession : IDisposable
                 _openingValidLength = _cacheValidLength;
             }
         }
-        await PrepareTailAsync(linked.Token);
+        await PrepareTailIfNeededAsync(linked.Token);
     }
+
+    /// <summary>
+    /// The eager tail probe only helps FFmpeg-based desktop playback. ExoPlayer reads the
+    /// tail itself when moov sits at the end of the file, so on Android it is pure overhead.
+    /// </summary>
+    private Task PrepareTailIfNeededAsync(CancellationToken ct) =>
+        OperatingSystem.IsAndroid() || !_upstreamAcceptsRanges
+            ? Task.CompletedTask
+            : PrepareTailAsync(ct);
 
     private async Task PrepareTailAsync(CancellationToken ct)
     {
@@ -180,7 +197,8 @@ internal sealed class HttpMediaStreamSession : IDisposable
 
     private async Task<(long Offset, byte[] Bytes)> LocateAndReadMoovAsync(byte[] initialBytes, CancellationToken ct)
     {
-        if (Mp4CencAnalyzer.TryFindTopLevelBox(initialBytes, "moov", out var moovOff, out var moovSize))
+        if (Mp4CencAnalyzer.TryFindTopLevelBox(initialBytes, "moov", out var moovOff, out var moovSize)
+            && moovSize <= MaxMoovBoxBytes)
         {
             return (moovOff, await ReadExactFileSpanAsync(moovOff, (int)moovSize, initialBytes, ct));
         }
@@ -210,7 +228,7 @@ internal sealed class HttpMediaStreamSession : IDisposable
 
             if (boxType == "moov")
             {
-                if (boxSize > 64 * 1024 * 1024)
+                if (boxSize > MaxMoovBoxBytes)
                     break;
                 var (fullMoov, _, _) = await FetchUpstreamRangeAsync(cursor, cursor + boxSize - 1, ct);
                 return (cursor, fullMoov);
@@ -335,6 +353,10 @@ internal sealed class HttpMediaStreamSession : IDisposable
 
     private async Task<(byte[] Bytes, long TotalLength, long ActualStart)> FetchUpstreamRangeAsync(long start, long endInclusive, CancellationToken ct)
     {
+        var requested = endInclusive - start + 1;
+        if (requested <= 0 || requested > MaxUpstreamFetchBytes)
+            throw new HttpRequestException("视频源请求范围超出限制");
+
         using var req = new HttpRequestMessage(HttpMethod.Get, _playUrl);
         foreach (var (k, v) in _playHeaders)
         {
@@ -345,9 +367,14 @@ internal sealed class HttpMediaStreamSession : IDisposable
         }
         req.Headers.Range = new RangeHeaderValue(start, endInclusive);
 
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct);
+        // ResponseHeadersRead + a bounded copy: an upstream that ignores Range must never be
+        // able to pull a whole episode into memory (that OOMs a 32-bit TV process).
+        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         if (resp.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.PartialContent))
             throw new HttpRequestException($"视频流请求失败 (HTTP {(int)resp.StatusCode})");
+
+        if (resp.StatusCode == HttpStatusCode.OK)
+            _upstreamAcceptsRanges = false;
 
         long totalLen = 0;
         if (resp.Content.Headers.ContentRange?.Length is { } crLen)
@@ -358,8 +385,71 @@ internal sealed class HttpMediaStreamSession : IDisposable
         var actualStart = resp.Content.Headers.ContentRange?.From
             ?? (resp.StatusCode == HttpStatusCode.OK ? 0L : start);
 
-        var data = await resp.Content.ReadAsByteArrayAsync(ct);
-        return (data, totalLen, actualStart);
+        // 200 means the upstream ignored the Range header. Accept it only at offset 0, where
+        // the prefix we need is already at the front of the body; a mid-file request would
+        // otherwise have to download and discard everything before `start`.
+        if (resp.StatusCode == HttpStatusCode.OK && start > 0)
+            throw new HttpRequestException("视频源不支持分段读取");
+
+        if (actualStart > start)
+            throw new HttpRequestException("视频源返回的数据范围与请求不符");
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(UpstreamReadTimeout);
+        byte[] data;
+        try
+        {
+            data = await ReadBoundedAsync(resp.Content, start - actualStart, requested, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new HttpRequestException("视频源读取超时");
+        }
+
+        // Normalize to the requested offset: callers never see a wider body's prefix.
+        return (data, totalLen, start);
+    }
+
+    private static async Task<byte[]> ReadBoundedAsync(
+        HttpContent content,
+        long skipBytes,
+        long takeBytes,
+        CancellationToken ct)
+    {
+        if (takeBytes <= 0)
+            return [];
+
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+        try
+        {
+            while (skipBytes > 0)
+            {
+                var read = await stream.ReadAsync(
+                    buffer.AsMemory(0, (int)Math.Min(buffer.Length, skipBytes)), ct);
+                if (read <= 0)
+                    return [];
+                skipBytes -= read;
+            }
+
+            var result = new byte[(int)takeBytes];
+            var offset = 0;
+            while (offset < result.Length)
+            {
+                var read = await stream.ReadAsync(
+                    buffer.AsMemory(0, (int)Math.Min(buffer.Length, result.Length - offset)), ct);
+                if (read <= 0)
+                    break;
+                Buffer.BlockCopy(buffer, 0, result, offset, read);
+                offset += read;
+            }
+
+            return offset == result.Length ? result : result[..offset];
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public void Dispose()

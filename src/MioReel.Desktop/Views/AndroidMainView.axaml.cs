@@ -21,6 +21,10 @@ public partial class AndroidMainView : UserControl
 {
     private const int StateEnded = 4;
 
+    // ExoPlayer 切换 MediaItem 后需要一点时间才会关闭旧数据源，
+    // 延迟回收旧代理会话，避免影响新剧集的加载。
+    private const long RetiredProxyReleaseDelayMs = 2_000;
+
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _syncTimer;
     private readonly DispatcherTimer _playerDetailsHideTimer;
@@ -28,6 +32,8 @@ public partial class AndroidMainView : UserControl
     private string? _reportedErrorUrl;
     private bool _endedReported;
     private bool _hostPaused;
+    private bool _retiredProxyReleasePending;
+    private long _retiredProxyReleaseDueMs;
     private readonly CatalogPrefetchGate _explorePrefetchGate = new();
     private ScrollViewer? _exploreScrollViewer;
     private bool _isCheckingExplorePrefetch;
@@ -388,6 +394,7 @@ public partial class AndroidMainView : UserControl
                     MediaPlayer.Stop();
                     _loadedUrl = null;
                     _endedReported = false;
+                    _retiredProxyReleasePending = false;
                     Dispatcher.UIThread.Post(() => NavExploreButton.Focus());
                 }
                 break;
@@ -451,6 +458,9 @@ public partial class AndroidMainView : UserControl
                     MediaPlayer.Stop();
                     _loadedUrl = null;
                     _viewModel.Player.IsPlaying = false;
+                    // 当前流已失败，退役的旧代理会话不会再被播放器读取，立即回收。
+                    _retiredProxyReleasePending = false;
+                    _viewModel.Player.ReleaseRetiredProxySessions();
                 }
                 break;
         }
@@ -488,15 +498,39 @@ public partial class AndroidMainView : UserControl
         _loadedUrl = url;
         _endedReported = false;
         _reportedErrorUrl = null;
+        ScheduleRetiredProxyRelease();
 
         if (resumeSeconds > 0.5)
             _viewModel.Player.NotifyDanmakuSeeked(resumeSeconds);
+    }
+
+    /// <summary>
+    /// 记录旧代理会话的回收时间。切换分集/画质时 <see cref="PlayerViewModel"/> 会把
+    /// 上一路代理 URI 退役，如果只在关闭播放器时统一释放，连播时每一集都会残留
+    /// 一份代理缓存（含 2MB 探测缓冲），内存会线性增长直到 OOM。
+    /// 这里等新 MediaItem 就位、ExoPlayer 关闭旧数据源后再回收。
+    /// </summary>
+    private void ScheduleRetiredProxyRelease()
+    {
+        _retiredProxyReleasePending = _viewModel.Player.HasRetiredProxySessions;
+        _retiredProxyReleaseDueMs = Environment.TickCount64 + RetiredProxyReleaseDelayMs;
+    }
+
+    private void TryReleaseRetiredProxySessions()
+    {
+        if (!_retiredProxyReleasePending || Environment.TickCount64 < _retiredProxyReleaseDueMs)
+            return;
+
+        _retiredProxyReleasePending = false;
+        _viewModel.Player.ReleaseRetiredProxySessions();
     }
 
     private void SyncPlayback()
     {
         if (!_viewModel.Player.IsOpen)
             return;
+
+        TryReleaseRetiredProxySessions();
 
         if (!MediaPlayer.IsReady)
             return;
@@ -569,6 +603,7 @@ public partial class AndroidMainView : UserControl
     {
         MediaPlayer.Stop();
         _loadedUrl = null;
+        _retiredProxyReleasePending = false;
         _viewModel.Player.Close();
         _viewModel.Player.ReleaseRetiredProxySessions();
     }

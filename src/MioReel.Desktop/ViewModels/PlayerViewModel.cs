@@ -59,6 +59,7 @@ public sealed class PlayerViewModel : ReactiveObject
     private const int AutoAdvanceFeedPageLimit = 3;
     private const int AutoAdvanceCatalogPageLimit = 2;
     private const int RecentAutoAdvanceCapacity = 12;
+    private const double NextEpisodePrefetchLeadSeconds = 45;
     private readonly List<string> _recentAutoAdvanceSeries = [];
     private DramaItem? _currentDrama;
     private string _heroTag = string.Empty;
@@ -850,7 +851,6 @@ public sealed class PlayerViewModel : ReactiveObject
                 resumeAtSeconds ?? 0, previous?.DurationSeconds ?? 0);
             _lastHistorySaveTick = Environment.TickCount64;
             HistoryUpdated?.Invoke();
-            StartNextEpisodePrefetch();
         }
         catch (OperationCanceledException)
         {
@@ -1137,7 +1137,6 @@ public sealed class PlayerViewModel : ReactiveObject
                     Codec = string.IsNullOrWhiteSpace(matchedVariant.Codec) ? _lastResolvedInfo.Codec : matchedVariant.Codec
                 };
                 await ActivateResolvedStreamAsync(swapped, cts.Token, resumeAtSeconds: resumePos);
-                if (!cts.IsCancellationRequested) StartNextEpisodePrefetch();
                 return;
             }
             catch (OperationCanceledException)
@@ -1298,6 +1297,7 @@ public sealed class PlayerViewModel : ReactiveObject
             SavePlaybackProgress();
         if (IsDanmakuEnabled && _activeDanmakuId is not null)
             EnsureDanmakuBufferedForSeconds(position.TotalSeconds);
+        MaybeStartNextEpisodePrefetch(position.TotalSeconds);
     }
 
     public void NotifyDanmakuSeeked(double positionSeconds)
@@ -1459,6 +1459,19 @@ public sealed class PlayerViewModel : ReactiveObject
         _prefetchKey = (CurrentDrama.SeriesId, next, _preferredQuality);
         _prefetchCts = new CancellationTokenSource();
         _prefetchTask = PrefetchEpisodeAsync(CurrentDrama.SeriesId, next, _preferredQuality, _prefetchCts.Token);
+    }
+
+    /// <summary>
+    /// 下一集只在当前集接近尾声时预取。刚开播就下载会与当前播放抢带宽，而提前几分钟
+    /// 准备好并没有收益；靠近结尾再取，足够在自动续播前完成，也不影响当前集缓冲。
+    /// </summary>
+    private void MaybeStartNextEpisodePrefetch(double positionSeconds)
+    {
+        if (_prefetchKey is not null) return;
+        if (!IsOpen || CurrentDrama is null || !HasRealMediaUrl || _offlinePlayback) return;
+        if (DurationSeconds <= 1.0) return;
+        if (positionSeconds < DurationSeconds - NextEpisodePrefetchLeadSeconds) return;
+        StartNextEpisodePrefetch();
     }
 
     private async Task PrefetchEpisodeAsync(string seriesId, int episodeNo, int quality, CancellationToken ct)
@@ -1787,6 +1800,9 @@ public sealed class PlayerViewModel : ReactiveObject
         if (prev is not null)
             _mediaProxy.ReleaseSession(prev);
     }
+
+    /// <summary>是否存在等待播放器切换完成后才能释放的旧代理会话。</summary>
+    public bool HasRetiredProxySessions => _retiredProxyUris.Count > 0;
 
     public void ReleaseRetiredProxySessions()
     {
