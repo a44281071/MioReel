@@ -251,7 +251,8 @@
         <!-- Search -->
         <Grid IsVisible="{Binding IsSearchActive}" RowDefinitions="Auto,Auto,*">
           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
-            <TextBox Text="{Binding SearchQuery, Mode=TwoWay}" PlaceholderText="输入剧名或关键词"
+            <TextBox x:Name="SearchBox" IsReadOnly="True"
+                     Text="{Binding SearchQuery, Mode=TwoWay}" PlaceholderText="输入剧名或关键词"
                      FontSize="20" Padding="14,10" CornerRadius="10"
                      Background="#171D29" Foreground="#F8FAFC" BorderBrush="#2A3346" />
             <Button Grid.Column="1" Classes="tv" Content="搜索" Command="{Binding ExecuteSearchCommand}" />

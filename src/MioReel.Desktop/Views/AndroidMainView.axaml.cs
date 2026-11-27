@@ -3,6 +3,7 @@ using System.Windows.Input;
 using Android.Views;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -62,6 +63,12 @@ public partial class AndroidMainView : UserControl
 
         _viewModel.Player.PropertyChanged += OnPlayerPropertyChanged;
         _viewModel.Player.SeekRequested += OnSeekRequested;
+
+        // 电视遥控器：搜索框获得焦点只用于导航，不立刻弹出软键盘；
+        // 按确定键后才进入编辑状态并唤起输入法。
+        SearchBox.AddHandler(KeyDownEvent, OnSearchBoxKeyDown, RoutingStrategies.Bubble);
+        SearchBox.LostFocus += (_, _) => SearchBox.IsReadOnly = true;
+        SearchBox.Tapped += (_, _) => BeginSearchEdit();
 
         ExploreVirtualizedList.TemplateApplied += (_, _) => AttachExploreScrollViewer();
         ExploreVirtualizedList.Loaded += (_, _) => AttachExploreScrollViewer();
@@ -598,6 +605,36 @@ public partial class AndroidMainView : UserControl
     }
 
     private void OnHidePlayerDetailsClick(object? sender, RoutedEventArgs e) => HidePlayerDetails();
+
+    /// <summary>
+    /// 电视端搜索框默认只读：焦点只表示“已选中”，不会唤起虚拟键盘。
+    /// 按确定键后取消只读，并触发输入法重查询，让 Android 输入法挂载
+    /// 文本输入客户端、弹出软键盘进入编辑状态。
+    /// </summary>
+    private void OnSearchBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || !SearchBox.IsReadOnly)
+            return;
+
+        if (e.Key is not (Key.Space or Key.Return))
+            return;
+
+        BeginSearchEdit();
+        e.Handled = true;
+    }
+
+    private void BeginSearchEdit()
+    {
+        if (!SearchBox.IsReadOnly)
+            return;
+
+        SearchBox.IsReadOnly = false;
+        SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
+        SearchBox.RaiseEvent(new TextInputMethodClientRequeryRequestedEventArgs
+        {
+            RoutedEvent = Avalonia.Input.InputMethod.TextInputMethodClientRequeryRequestedEvent
+        });
+    }
 
     private void ClosePlayer()
     {
