@@ -705,6 +705,17 @@ public sealed class PlayerViewModel : ReactiveObject
     private async Task SelectEpisodeAsync(EpisodeOptionViewModel? item)
     {
         if (item is null || CurrentDrama is null) return;
+
+        // 详情面板打开时会自动把焦点放到当前集按钮上，用户按确定键收起面板时
+        // 很容易再次选中当前集。这里直接忽略，避免无谓地重新解析播放源、把
+        // 正在播放的这集从 0 重新加载（表现为卡顿后本集重播）。
+        // 播放出错（HasStreamError）时仍允许重新选择当前集，等同于重试。
+        if (item.No == CurrentEpisodeNo && HasRealMediaUrl && !HasStreamError)
+        {
+            HideDetails();
+            return;
+        }
+
         HideDetails();
         _resolveCts?.Cancel();
         _resolveCts = new CancellationTokenSource();

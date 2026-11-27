@@ -198,6 +198,23 @@ try
     Check(!player.ShowMiniTopBar && !player.ShowTransportControls, "小窗允许切换隐藏全部功能栏");
     player.Close();
 
+    var reselectCatalog = new FakeCatalog();
+    var reselectProxy = new FakeProxy();
+    var reselectPlayer = new PlayerViewModel(reselectCatalog, reselectProxy, new InMemoryHistoryService(),
+        new InMemorySettingsService(), DispatchProxy.Create<IToastService, NoopProxy>());
+    await reselectPlayer.OpenAsync(new DramaCardViewModel(drama, "reselect"));
+    var playingUrl = reselectPlayer.ResolvedPlayUrl;
+    var resolveCount = reselectCatalog.Resolved.Count;
+    reselectPlayer.SyncFromPlayer(TimeSpan.FromSeconds(42), TimeSpan.FromSeconds(120));
+    reselectPlayer.ShowDetails();
+    await reselectPlayer.SelectEpisodeCommand
+        .Execute(reselectPlayer.Episodes.Single(x => x.No == reselectPlayer.CurrentEpisodeNo)).ToTask();
+    Check(reselectPlayer.ResolvedPlayUrl == playingUrl && reselectCatalog.Resolved.Count == resolveCount,
+        "详情面板重复选择当前集不重新解析播放源");
+    Check(!reselectPlayer.IsDetailsVisible, "详情面板重复选择当前集只收起面板");
+    Check(Math.Abs(reselectPlayer.PositionSeconds - 42) < 0.01, "详情面板重复选择当前集不清空播放进度");
+    reselectPlayer.Close();
+
     var volSettingsPath = Path.Combine(root, "vol-settings.json");
     File.WriteAllText(volSettingsPath, """{"Theme":0,"MiniWindowAlwaysOnTop":true,"DefaultQuality":1080,"AutoPlayNextEpisode":true,"DownloadDirectory":"","GatewayBaseUrl":"https://example.invalid"}""");
     var volSettings = new FileSettingsService(volSettingsPath);
