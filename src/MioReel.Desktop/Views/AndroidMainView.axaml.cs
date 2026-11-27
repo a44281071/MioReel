@@ -1,6 +1,8 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows.Input;
 using Android.Views;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.TextInput;
@@ -40,6 +42,9 @@ public partial class AndroidMainView : UserControl
     private bool _isCheckingExplorePrefetch;
     private bool _isExplorePrefetchQueued;
     private bool _isCatalogObserved;
+    private bool _isExploreFocusObserved;
+    private bool _exploreFocusRestoreQueued;
+    private string? _focusedExploreSeriesId;
 
     // Avalonia's compiled XAML requires an accessible parameterless constructor.
     public AndroidMainView()
@@ -66,7 +71,7 @@ public partial class AndroidMainView : UserControl
 
         // 电视遥控器：搜索框获得焦点只用于导航，不立刻弹出软键盘；
         // 按确定键后才进入编辑状态并唤起输入法。
-        SearchBox.AddHandler(KeyDownEvent, OnSearchBoxKeyDown, RoutingStrategies.Bubble);
+        SearchBox.AddHandler(KeyDownEvent, OnSearchBoxKeyDown, RoutingStrategies.Tunnel);
         SearchBox.LostFocus += (_, _) => SearchBox.IsReadOnly = true;
         SearchBox.Tapped += (_, _) => BeginSearchEdit();
 
@@ -75,7 +80,7 @@ public partial class AndroidMainView : UserControl
         ExploreVirtualizedList.SizeChanged += (_, _) => UpdateExploreColumns();
         AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (e.Key is Key.Down or Key.PageDown or Key.End or Key.Space)
+            if (e.Key is Key.Down or Key.PageDown or Key.End)
                 RequestExplorePrefetch();
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
         SizeChanged += (_, _) =>
@@ -103,6 +108,7 @@ public partial class AndroidMainView : UserControl
             _viewModel.PropertyChanged += OnCatalogStateChanged;
             _isCatalogObserved = true;
         }
+        AttachExploreFocusTracking();
         MainActivity.KeyDispatched += HandleKey;
 
         // A recreated activity may hand us a fresh native player surface.
@@ -139,6 +145,7 @@ public partial class AndroidMainView : UserControl
             _viewModel.PropertyChanged -= OnCatalogStateChanged;
             _isCatalogObserved = false;
         }
+        DetachExploreFocusTracking();
         if (_exploreScrollViewer is not null)
         {
             _exploreScrollViewer.ScrollChanged -= OnExploreScrollChanged;
@@ -173,6 +180,82 @@ public partial class AndroidMainView : UserControl
         if (width <= 0)
             return;
         _viewModel.UpdateExploreColumns(width, 118, 8);
+    }
+
+    private void AttachExploreFocusTracking()
+    {
+        if (_isExploreFocusObserved)
+            return;
+
+        _isExploreFocusObserved = true;
+        _viewModel.ExploreCards.CollectionChanged += OnExploreCollectionChanged;
+        _viewModel.ExploreRows.CollectionChanged += OnExploreCollectionChanged;
+        AddHandler(GotFocusEvent, OnExploreGotFocus, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void DetachExploreFocusTracking()
+    {
+        if (!_isExploreFocusObserved)
+            return;
+
+        _isExploreFocusObserved = false;
+        _viewModel.ExploreCards.CollectionChanged -= OnExploreCollectionChanged;
+        _viewModel.ExploreRows.CollectionChanged -= OnExploreCollectionChanged;
+        RemoveHandler(GotFocusEvent, OnExploreGotFocus);
+        _focusedExploreSeriesId = null;
+        _exploreFocusRestoreQueued = false;
+    }
+
+    private void OnExploreGotFocus(object? sender, FocusChangedEventArgs e)
+    {
+        if (e.NewFocusedElement is Visual focused
+            && (ReferenceEquals(focused, ExploreVirtualizedList) || ExploreVirtualizedList.IsVisualAncestorOf(focused)))
+        {
+            // 列表内部控件（卡片或虚拟化容器）获得焦点时记住当前剧集；
+            // 容器回收/重建期间焦点可能暂时落到列表本身，此时不能丢掉记录。
+            if ((focused as Avalonia.Controls.Button
+                 ?? focused.FindAncestorOfType<Avalonia.Controls.Button>())?.DataContext is DramaCardViewModel card)
+                _focusedExploreSeriesId = card.Drama.SeriesId;
+            return;
+        }
+
+        // 用户把焦点移到列表以外（导航栏、搜索框、播放页等）时不再恢复。
+        _focusedExploreSeriesId = null;
+        _exploreFocusRestoreQueued = false;
+    }
+
+    private void OnExploreCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_focusedExploreSeriesId is null || _exploreFocusRestoreQueued)
+            return;
+
+        // 虚拟化列表在数据追加/重建后可能回收并重新创建卡片容器，
+        // 原焦点元素被移出视觉树后 Avalonia 会清空焦点。
+        // 等本次布局完成后把焦点恢复到同一部剧集上。
+        _exploreFocusRestoreQueued = true;
+        Dispatcher.UIThread.Post(RestoreExploreFocus, DispatcherPriority.Loaded);
+    }
+
+    private void RestoreExploreFocus()
+    {
+        _exploreFocusRestoreQueued = false;
+        var seriesId = _focusedExploreSeriesId;
+        if (seriesId is null
+            || !_viewModel.IsExploreActive
+            || _viewModel.Player.IsOpen
+            || !IsEffectivelyVisible)
+            return;
+
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+        if (focused is Avalonia.Controls.Button { DataContext: DramaCardViewModel current }
+            && string.Equals(current.Drama.SeriesId, seriesId, StringComparison.Ordinal))
+            return;
+
+        var target = ExploreVirtualizedList.GetVisualDescendants()
+            .OfType<Avalonia.Controls.Button>()
+            .FirstOrDefault(x => x.DataContext is DramaCardViewModel card
+                                 && string.Equals(card.Drama.SeriesId, seriesId, StringComparison.Ordinal));
+        target?.Focus();
     }
 
     private void RequestExplorePrefetch()
@@ -613,14 +696,29 @@ public partial class AndroidMainView : UserControl
     /// </summary>
     private void OnSearchBoxKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled || !SearchBox.IsReadOnly)
+        if (!SearchBox.IsReadOnly)
             return;
 
-        if (e.Key is not (Key.Space or Key.Return))
+        if (e.Key is Key.Space or Key.Return)
+        {
+            BeginSearchEdit();
+            e.Handled = true;
             return;
+        }
 
-        BeginSearchEdit();
-        e.Handled = true;
+        // 只读状态只承担焦点导航：方向键移动焦点，而不是在输入框里移光标。
+        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
+        {
+            var direction = e.Key switch
+            {
+                Key.Left => NavigationDirection.Left,
+                Key.Right => NavigationDirection.Right,
+                Key.Up => NavigationDirection.Up,
+                _ => NavigationDirection.Down
+            };
+            TopLevel.GetTopLevel(this)?.FocusManager?.TryMoveFocus(direction);
+            e.Handled = true;
+        }
     }
 
     private void BeginSearchEdit()
